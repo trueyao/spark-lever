@@ -113,8 +113,10 @@ if [ "$SPARK_PID_DIR" = "" ]; then
 fi
 
 # some variables
-log="$SPARK_LOG_DIR/spark-$SPARK_IDENT_STRING-$command-$instance-$HOSTNAME.out"
-pid="$SPARK_PID_DIR/spark-$SPARK_IDENT_STRING-$command-$instance.pid"
+#log="$SPARK_LOG_DIR/spark-$SPARK_IDENT_STRING-$command-$instance-$HOSTNAME.out"
+log="$SPARK_LOG_DIR/spark-$SPARK_IDENT_STRING-$command-$instance-$HOSTNAME.out.`date +%Y-%m-%d`"
+#pid="$SPARK_PID_DIR/spark-$SPARK_IDENT_STRING-$command-$instance.pid"
+pid="$SPARK_PID_DIR/spark-$SPARK_IDENT_STRING-$command-$instance-$HOSTNAME.pid"
 
 # Set default scheduling priority
 if [ "$SPARK_NICENESS" = "" ]; then
