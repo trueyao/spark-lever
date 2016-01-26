@@ -155,11 +155,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
         }
 
       case NotifyWorkerMonitorForPendingTaskAmount(host, amount) =>
-        logInfo(s"test - host ${host} amount ${amount}")
+        logInfo(s"test - host ${host} add new PendingTask amount ${amount}")
         workerMonitorActor(host) ! PendingTaskAmount(amount)
 
       case NotifyWorkerMonitorForPendingTaskSize(host, size) =>
-        logInfo(s"test - host ${host} size ${size}")
+        logInfo(s"test - host ${host} add new PendingTask size ${size}")
         workerMonitorActor(host) ! PendingTaskSize(size)
 
       case StopDriver =>

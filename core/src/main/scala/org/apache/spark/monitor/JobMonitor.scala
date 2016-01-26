@@ -173,7 +173,7 @@ private[spark] class JobMonitor(master: ActorRef,
             max = line
           }
         }
-        hostList.append(max)      //其实就是将hostToEstimateDataSize里的host按降序依次加入到hostList中
+        hostList.append(max)      //其次将hostToEstimateDataSize里的host按EstimateDataSize降序加入到hostList中
         hostToEstimateDataSize.remove(max._1)
       }
 

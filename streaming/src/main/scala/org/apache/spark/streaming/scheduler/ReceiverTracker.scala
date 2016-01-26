@@ -86,7 +86,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       throw new SparkException("ReceiverTracker already started")
     }
 
-    if (!receiverInputStreams.isEmpty) {   //此处不能理解，receiverTracker启动之前，receiverInputStreams应该为空才对啊（已明白，见印象第7条）
+    if (!receiverInputStreams.isEmpty) {
       actor = ssc.env.actorSystem.actorOf(Props(new ReceiverTrackerActor),
         "ReceiverTracker")
       if (!skipReceiverLaunch) receiverExecutor.start()

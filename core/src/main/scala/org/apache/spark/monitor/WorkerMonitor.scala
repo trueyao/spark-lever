@@ -96,7 +96,7 @@ private[spark] class WorkerMonitor(
     case StoppedExecutor(executorId) =>
       executors.remove(executorId)
       logInfo(s"Stopped executor ${executorId}")
-
+  //From CoarseGrainedSchedulerBackend
     case RequestConnectionToWorkerMonitor =>
       schedulerBackendToTasks(sender) = new HashSet[Long]
       logInfo(s"connected to scheduler backend ${sender}")
@@ -104,7 +104,7 @@ private[spark] class WorkerMonitor(
 
     case PendingTaskAmount(amount) =>
       totalPendingTask += amount
-
+  //From CoarseGrainedSchedulerBackend
     case PendingTaskSize(size) =>
       logInfo(s"new pending task size is ${size}")
       totalPendingTaskSize += size
