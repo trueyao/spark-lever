@@ -122,7 +122,7 @@ private[spark] class JobMonitor(master: ActorRef,
       val max = result.filter(x => x._2 > maxRatio).keySet.toSeq
       val other = result.filter(x => x._2 <= maxRatio).keySet.toSeq
       if (max.size == 1) {
-        maxHost = if (max(0) == maxHost._1) (max(0), maxHost._2 + 1) else (max(0), 1) //如果有多个超过maxRatio的host怎么办？
+        maxHost = if (max(0) == maxHost._1) (max(0), maxHost._2 + 1) else (max(0), 1)
         val superRatio = (result(max(0)) - maxRatio) / 2
         result(max(0)) = maxRatio
         result(other(0)) += superRatio

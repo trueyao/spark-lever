@@ -42,15 +42,15 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
     val key = RDDBlockId(rdd.id, partition.index)
 
     blockManager.getLocal(key) match {
-      case Some(blockResult) => (0 - blockManager.getBlockSize(key))  //为啥是0- ?
+      case Some(blockResult) => (0 - blockManager.getBlockSizeInBeginning(key))  //为啥是0- ?
 
       case None =>
         try {
           if (checkLockForPartition[T](key)) {
-            (0 - blockManager.getBlockSize(key))
+            (0 - blockManager.getBlockSizeInBeginning(key))
           } else {
             val blockId = partition.asInstanceOf[BlockRDDPartition].blockId
-            val size = blockManager.getBlockSize(blockId)
+            val size = blockManager.getBlockSizeInBeginning(blockId)
             logInfo(s"test - The size in blockId ${blockId} is ${size}")
             size
           }

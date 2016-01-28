@@ -929,7 +929,7 @@ private[spark] class BlockManager(
           blockManager.host, blockManager.port, blockManager.executorId, blockId, new NioManagedBuffer(data), tLevel)
         logInfo(s"Reallocated $blockId of ${data.limit()} bytes to $blockManager in %s ms"
           .format(System.currentTimeMillis - onePeerStartTime))
-        master.relocateBlockId(blockId, this.blockManagerId, blockManager)
+        master.relocateBlockId(blockId, this.blockManagerId, blockManager)  //master to refresh after relocate block
 
         true
 

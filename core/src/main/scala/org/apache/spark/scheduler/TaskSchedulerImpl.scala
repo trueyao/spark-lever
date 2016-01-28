@@ -166,6 +166,7 @@ private[spark] class TaskSchedulerImpl(
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
 
       val pendingTaskPartitionsForHost = manager.queryPendingTaskPartitionsForHost()
+      logInfo(s"test - pendingTaskPartitionForHost is ${pendingTaskPartitionsForHost}")
       for (partitions <- pendingTaskPartitionsForHost) {
         var totalSize = 0L
         for (index <- partitions._2) {

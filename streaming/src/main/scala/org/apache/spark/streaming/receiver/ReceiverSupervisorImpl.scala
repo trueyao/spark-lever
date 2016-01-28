@@ -177,6 +177,7 @@ private[streaming] class ReceiverSupervisorImpl(
 
     //    val totalReceivedSize = env.blockManager.getBlockSize(blockId)：Liuzhiyi
     val totalReceivedSize = env.blockManager.getBlockSizeInBeginning(blockId)
+    logInfo(s"test - In pushAndReportBlock(), totalReceivedSize is ${totalReceivedSize}")
     val localHost = env.blockManager.blockManagerId.host
 
     val blockInfo = ReceivedBlockInfo(streamId, numRecords, totalReceivedSize, blockStoreResult) //add size
