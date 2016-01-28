@@ -216,7 +216,7 @@ class BlockManagerMaster(
                       oldBlockManager: BlockManagerId,
                       newBlockManager: BlockManagerId): Unit ={
     tell(RelocateBlock(blockId, oldBlockManager, newBlockManager))
-    logInfo(s"The block ${blockId} has been remove to ${newBlockManager} from ${oldBlockManager}")
+    logInfo(s"The block ${blockId} has been move to ${newBlockManager} from ${oldBlockManager}")
   }
 
   /**

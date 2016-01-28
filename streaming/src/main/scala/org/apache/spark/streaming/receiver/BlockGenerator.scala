@@ -166,7 +166,7 @@ private[streaming] class BlockGenerator(
         (0 until newBlockBuffers.size).map { i =>
           val blockId = StreamBlockId(receiverId, time - blockInterval, i)
           val newBlock = new Block(blockId, newBlockBuffers(i))
-          logInfo("Generate block " + blockId.name)
+          logInfo("test - Generate block " + blockId.name)
           listener.onGenerateBlock(blockId)
           blocksForPushing.put(newBlock)  // put is blocking when queue is full
           logDebug("Last element in " + blockId + " is " + newBlockBuffers(i).last)

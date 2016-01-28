@@ -126,9 +126,9 @@ private[streaming] class BlockManagerBasedBlockHandler(
       val result = blockManager.reallocateBlock(blockId, newBlockManagerId, storageLevel)
 
       if (result)
-        logInfo(s"Reallocate block ${blockId} to the block manager ${newBlockManagerId}")
+        logInfo(s"test - Reallocate block ${blockId} to the block manager ${newBlockManagerId}")
       else
-        logInfo(s"Failed to reallocate block ${blockId} to the block manager ${newBlockManagerId}")
+        logInfo(s"test - Failed to reallocate block ${blockId} to the block manager ${newBlockManagerId}")
     }
   }
 }

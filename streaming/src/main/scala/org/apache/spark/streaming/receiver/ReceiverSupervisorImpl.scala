@@ -191,7 +191,7 @@ private[streaming] class ReceiverSupervisorImpl(
      * Added by Liuzhiyi
      */
     val STREAM = "input-([0-9]+)-([0-9]+)-([0-9]+)".r
-    logInfo(s"Before reallocate, block name is ${blockId.name}")
+    logInfo(s"test - Before reallocate, block name is ${blockId.name}")
     blockId.name match {
       case STREAM(streamId, uniqueId, sliceId) =>
         val slice = sliceId.toInt
