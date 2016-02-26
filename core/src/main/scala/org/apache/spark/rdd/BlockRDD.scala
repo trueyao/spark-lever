@@ -45,8 +45,19 @@ class BlockRDD[T: ClassTag](@transient sc: SparkContext, @transient val blockIds
     assertValid()
     val blockManager = SparkEnv.get.blockManager
     val blockId = split.asInstanceOf[BlockRDDPartition].blockId
-    blockManager.get(blockId) match {
-      case Some(block) => block.data.asInstanceOf[Iterator[T]]
+    blockManager.get(blockId) match { //Metrics part is added by yy for test
+      case Some(block) =>
+        val inputMetrics = block.inputMetrics
+        val existingMetrics = context.taskMetrics
+          .getInputMetricsForReadMethod(inputMetrics.readMethod)
+        existingMetrics.incBytesRead(inputMetrics.bytesRead)
+        val iter = block.data.asInstanceOf[Iterator[T]]
+        new InterruptibleIterator[T](context, iter) {
+          override def next(): T = {
+            existingMetrics.incRecordsRead(1)
+            delegate.next()
+          }
+        }
       case None =>
         throw new Exception("Could not compute split, block " + blockId + " not found")
     }

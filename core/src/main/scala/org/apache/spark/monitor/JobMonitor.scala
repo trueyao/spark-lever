@@ -154,7 +154,7 @@ private[spark] class JobMonitor(master: ActorRef,
         hostToEstimateDataSize(worker._2) = hostToEstimateDataSize.getOrElseUpdate(worker._2, 0L) + workerEstimateDataSize(worker._1)
       }
 
-      if(maxHost._2 > 3) {
+      if(maxHost._2 > 3) {   //3是该maxHost在历史统计中出现的次数，人为设定的
         hostToEstimateDataSize.remove(maxHost._1)
         maxHost = (maxHost._1, maxHost._2 - 1)
       }

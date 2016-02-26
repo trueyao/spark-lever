@@ -31,7 +31,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
 
   /** Keys of RDD partitions that are being computed/loaded. */
   private val loading = new mutable.HashSet[RDDBlockId]
-
+/**
   /**
    * Get the blockSize of the RDD, Only used by RDD.getRddBlockSize()
    * Added by Liuzhiyi
@@ -60,7 +60,15 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         }
     }
   }
-
+*/
+  def getBlockSize[T](
+      rdd: RDD[T],
+      partition: Partition): Long = {
+    val blockId = partition.asInstanceOf[BlockRDDPartition].blockId
+    val size = blockManager.getBlockSizeInBeginning(blockId)
+    logInfo(s"test - The size in blockId ${blockId} is ${size}")
+    size
+  }
   /** Gets or computes an RDD partition. Used by RDD.iterator() when an RDD is cached. */
   def getOrCompute[T](
       rdd: RDD[T],

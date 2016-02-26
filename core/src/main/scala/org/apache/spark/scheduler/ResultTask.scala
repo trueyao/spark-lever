@@ -58,7 +58,8 @@ private[spark] class ResultTask[T, U](
       ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
 
     metrics = Some(context.taskMetrics)
-    (rdd.getRddBlockSize(partition), func(context, rdd.iterator(partition, context)))
+    //(rdd.getRddBlockSize(partition), func(context, rdd.iterator(partition, context)))
+    (metrics.get.inputMetrics.map(_.bytesRead).getOrElse(0L), func(context, rdd.iterator(partition, context)))
   }
 
   // This is only callable on the driver side.

@@ -234,7 +234,7 @@ class BlockManagerMaster(
 
   def getBlockManagerIdForHost(host: String): Seq[BlockManagerId] = {
     val allBlockManagerId = askDriverWithReply[Seq[BlockManagerId]](GetBlockManagerIdForHost(host))
-    logInfo("Get all block manager Id: " + allBlockManagerId.toArray)
+    logInfo("Get all block manager Id for host " + host + ":" + allBlockManagerId.toArray)
     allBlockManagerId
   }
 

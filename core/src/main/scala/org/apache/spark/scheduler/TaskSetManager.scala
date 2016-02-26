@@ -511,7 +511,10 @@ private[spark] class TaskSetManager(
           // We used to log the time it takes to serialize the task, but task size is already
           // a good proxy to task serialization time.
           // val timeTaken = clock.getTime() - startTime
-          val taskName = s"task ${info.id} in stage ${taskSet.id}"
+          val shuffleOrResult = if(sched.dagScheduler.stageIdToStage(taskSet.stageId).isShuffleMap) "ShuffleMap"
+            else "Result" //added by yy
+          //val taskName = s"task ${info.id} in ${shuffleOrResult} stage ${taskSet.id}"
+          val taskName = s"task[${task}] in ${shuffleOrResult} stage ${taskSet.id}"
           logInfo("Starting %s (TID %d, %s, %s, %d bytes)".format(
               taskName, taskId, host, taskLocality, serializedTask.limit))
 

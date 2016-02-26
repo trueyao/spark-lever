@@ -196,8 +196,8 @@ private[streaming] class BlockGenerator(
     } else {
       val oldBlockBuffer = blockBuffer
       var newBlockBuffers = Seq[ArrayBuffer[Any]]()
-      (0 until splitNum).map { i =>  //until splitNum, i 最大为splitNum-1 ,所以之后的else不会起作用
-        if (i != splitNum) {
+      (0 until splitNum).map { i =>  //until splitNum, i 最大为splitNum-1 ,所以之后的else不会起作用.16/2/21修正
+        if (i != splitNum-1) {
           val everyNewBlockBufferLength: Int = (blockBuffer.size * splitRatio(i)).toInt //有隐患，如5*0.3和5*0.7，化整之后会丢失block
           val newBlockBuffer = oldBlockBuffer.take(everyNewBlockBufferLength)
           oldBlockBuffer --= newBlockBuffer

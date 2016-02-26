@@ -167,6 +167,18 @@ private[spark] class TaskSchedulerImpl(
 
       val pendingTaskPartitionsForHost = manager.queryPendingTaskPartitionsForHost()
       logInfo(s"test - pendingTaskPartitionForHost is ${pendingTaskPartitionsForHost}")
+      val shuffleOrResult = if(dagScheduler.stageIdToStage(taskSet.stageId).isShuffleMap) "ShuffleMap"
+        else "Result" //added by yy
+      if (shuffleOrResult == "ShuffleMap"){
+        for (partitions <- pendingTaskPartitionsForHost) {
+          var totalSize = 0L
+          for (index <- partitions._2) {
+            totalSize += rdd.getRddBlockSize(index)
+          }
+          backend.notifyWorkerMonitorForPendingTaskSize(partitions._1, totalSize)
+        }
+      }
+/**
       for (partitions <- pendingTaskPartitionsForHost) {
         var totalSize = 0L
         for (index <- partitions._2) {
@@ -174,7 +186,7 @@ private[spark] class TaskSchedulerImpl(
         }
         backend.notifyWorkerMonitorForPendingTaskSize(partitions._1, totalSize)
       }
-
+*/
       if (!isLocal && !hasReceivedTask) {
         starvationTimer.scheduleAtFixedRate(new TimerTask() {
           override def run() {
