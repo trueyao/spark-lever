@@ -65,9 +65,27 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
       rdd: RDD[T],
       partition: Partition): Long = {
     val blockId = partition.asInstanceOf[BlockRDDPartition].blockId
-    val size = blockManager.getBlockSizeInBeginning(blockId)
-    logInfo(s"test - The size in blockId ${blockId} is ${size}")
-    size
+    blockManager.get(blockId) match {
+      case Some(blockResult) =>
+        // Partition is already materialized, so just return its values
+        val size = blockResult.inputMetrics.bytesRead
+        logInfo(s"test - The size in blockId ${blockId} is ${size}")
+        return size
+      case None =>
+        // Acquire a lock for loading this partition
+        // If another thread already holds the lock, wait for it to finish return its results
+        val key = RDDBlockId(rdd.id, partition.index)
+        val storedValues = acquireLockForPartition2[T](key)
+        storedValues match{
+          case Some(blockResult) =>
+            val size = blockResult.inputMetrics.bytesRead
+            logInfo(s"test[after acquireLockForPartition2] - The size in blockId ${blockId} is ${size}")
+            return size
+          case None =>
+            logInfo(s"test[after acquireLockForPartition2] - The size in blockId ${blockId} is 0")
+            return 0L
+        }
+    }
   }
   /** Gets or computes an RDD partition. Used by RDD.iterator() when an RDD is cached. */
   def getOrCompute[T](
@@ -164,6 +182,35 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
       }
     }
   }
+  /** Added by yy*/
+  private def acquireLockForPartition2[T](id: RDDBlockId): Option[BlockResult] = {
+    loading.synchronized {
+      if (!loading.contains(id)) {
+        None
+      } else {
+        // Otherwise, wait for another thread to finish and return its result
+        logInfo(s"Another thread is loading $id, waiting for it to finish...")
+        while (loading.contains(id)) {
+          try {
+            loading.wait()
+          } catch {
+            case e: Exception =>
+              logWarning(s"Exception while waiting for another thread to load $id", e)
+          }
+        }
+        logInfo(s"Finished waiting for $id")
+        val values = blockManager.get(id)
+        if (!values.isDefined) {
+          /* The block is not guaranteed to exist even after the other thread has finished.
+           * For instance, the block could be evicted after it was put, but before our get.
+           * In this case, we still need to load the partition ourselves. */
+          logInfo(s"Whoever was loading $id failed")
+          return None
+        }
+        values
+      }
+    }
+  }
   /**Added by Liuzhiyi*/
   private def checkLockForPartition[T](id: RDDBlockId): Boolean = {
     loading.synchronized {
@@ -174,6 +221,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
       }
     }
   }
+
 
   /**
    * Cache the values of a partition, keeping track of any updates in the storage statuses of

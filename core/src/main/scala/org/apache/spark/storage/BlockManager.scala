@@ -915,30 +915,34 @@ private[spark] class BlockManager(
    * When this node has high load, then it will reallocation some blocks to other node
    * so that the task can be finished in other node.
    *
-   * Added by Liuzhiyi
+   * Added by Liuzhiyi; Modified by yy
    */
   def reallocateBlock(blockId: BlockId, blockManager: BlockManagerId, level: StorageLevel): Boolean = {
     val tLevel = StorageLevel(
       level.useDisk, level.useMemory, level.useOffHeap, level.deserialized, 1)
     doGetLocal(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]] match {
       case Some(data) =>
-        val onePeerStartTime = System.currentTimeMillis
-        data.rewind()
-        logInfo(s"Trying to reallocate $blockId of ${data.limit()} bytes to $blockManager")
-        blockTransferService.uploadBlockSync(
-          blockManager.host, blockManager.port, blockManager.executorId, blockId, new NioManagedBuffer(data), tLevel)
-        logInfo(s"Reallocated $blockId of ${data.limit()} bytes to $blockManager in %s ms"
-          .format(System.currentTimeMillis - onePeerStartTime))
-        master.relocateBlockId(blockId, this.blockManagerId, blockManager)  //master to refresh after relocate block
-
-        true
-
+        try{
+          val onePeerStartTime = System.currentTimeMillis
+          data.rewind()
+          logInfo(s"Trying to reallocate $blockId of ${data.limit()} bytes to $blockManager")
+          blockTransferService.uploadBlockSync(
+            blockManager.host, blockManager.port, blockManager.executorId, blockId, new NioManagedBuffer(data), tLevel)
+          logInfo(s"Reallocated $blockId of ${data.limit()} bytes to $blockManager in %s ms"
+            .format(System.currentTimeMillis - onePeerStartTime))
+          removeBlock(blockId,true)
+          //master.relocateBlockId(blockId, this.blockManagerId, blockManager)  //after uploadBlockSync,master will refresh
+          true
+        }catch{
+           case e: Exception =>
+             logWarning(s"Failed to reallocate $blockId to ${blockManager.host}", e)
+             false
+        }
       case _ =>
         logInfo(s"Can't find block $blockId locally, refuse to reallocate it -- reallocateBlock")
         false
     }
   }
-
   /**
    * Get all blockManagerId from block master, and random choose a block manager for reallocate
    * Just for a test now
