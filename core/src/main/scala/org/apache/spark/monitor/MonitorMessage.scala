@@ -35,6 +35,8 @@ private[spark] object WorkerMonitorMessages {
   // Added by Liuzhiyi
   case class ExecutorHandledDataSpeed(size: Long, speed: Double, executorId: String) extends WorkerMonitorMessage
 
+  case class ExecutorFinishedTaskData(size: Long, time: Long, executorId: String) extends WorkerMonitorMessage
+
   case class RegisterExecutorInWorkerMonitor(executorId: String) extends WorkerMonitorMessage
 
   case class StoppedExecutor(executorId: String) extends WorkerMonitorMessage
@@ -86,7 +88,7 @@ private[spark] object JobMonitorMessages {
   case class UpdateFunction(needSplit: Boolean, workerDataRatio: HashMap[String, Double]) extends JobMonitorMessage
 
   // JobScheduler to JobMonitor
-  case class JobFinished(time: Long) extends JobMonitorMessage
+  case class JobSetFinished(totalDelay: Long, forTime: String, processingDelay: Long) extends JobMonitorMessage
 }
 
 private[spark] sealed trait MonitorMessage extends Serializable

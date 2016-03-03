@@ -153,6 +153,12 @@ private[spark] class CoarseGrainedExecutorBackend(
     logInfo(s"executor ${executorId} current handled speed ${currentHandledSpeed}, total handled speed ${totalSpeed}")
     workerMonitor ! ExecutorHandledDataSpeed(dataSize, totalSpeed, executorId)
   }
+  override def FinishedTaskDataUpdate(taskId: Long, startTime: Long, endTime: Long, dataSize: Long): Unit = {
+    val executionTime = endTime - startTime
+    logInfo(s"executor ${executorId} finished task ${taskId} in ${executionTime}," +
+      s" handled dataSize is ${dataSize} bytes")
+    workerMonitor ! ExecutorFinishedTaskData(dataSize, executionTime, executorId)
+  }
 }
 
 private[spark] object CoarseGrainedExecutorBackend extends Logging {

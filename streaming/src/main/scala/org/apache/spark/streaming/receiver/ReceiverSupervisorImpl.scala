@@ -203,7 +203,7 @@ private[streaming] class ReceiverSupervisorImpl(
           logInfo(s"test - Reallocate block ${blockId} to host ${blockIdToHostTable(slice)} from host ${localHost}")
         } else {
           trackerActor ! StreamingReceivedSize(totalReceivedSize, localHost)
-          logInfo(s"test - Received block ${blockId} in host ${localHost}")
+          logInfo(s"test - Not reallocated,received block ${blockId} in host ${localHost}")
         }
 
       case _ =>

@@ -83,8 +83,9 @@ private[spark] class JobMonitor(master: ActorRef,
         pendingDataSizeForHost(host) = size
       }
     //From JobScheduler
-    case JobFinished(time) =>
-      logInfo(s"jobFinished time ${time}")
+    case JobSetFinished(totalDelay, forTime, processingDelay) =>
+      logInfo(s"jobset for time:${forTime} finished, totalDelay ${totalDelay} ms, execution ${processingDelay} ms")
+      /**
       if (pendingDataSizeForHost.size != 0 && hasTimerCancel) {
         hasTimerCancel = false
         for (workerMonitor <- workerMonitors) {
@@ -93,16 +94,27 @@ private[spark] class JobMonitor(master: ActorRef,
         timer = new Timer()
         timer.schedule(new updateDataLocation(), batchDuration / 3, batchDuration * 2)
       }
+      */
+      if (hasTimerCancel){
+        for (workerMonitor <- workerMonitors) {
+          workerMonitor._2 ! QueryEstimateDataSize
+        }
+        timer = new Timer()
+        timer.schedule(new updateDataLocation(), batchDuration / 3, batchDuration * 2)
+      }
+
     //From WorkerMonitor
     case WorkerEstimateDataSize(estimateDataSize, handledDataSize, workerId, host) =>
       logInfo(s"host ${host}, workerId ${workerId}, handledDataSize ${handledDataSize}, estimateDataSize ${estimateDataSize}")
+      /**
       if (!pendingDataSizeForHost.contains(host)) {
         pendingDataSizeForHost(host) = 0L
       }
       pendingDataSizeForHost(host) -= handledDataSize       //可能产生负值？
+      */
       workerEstimateDataSize(workerId) = estimateDataSize
       workerToHost(workerId) = host
-      logInfo(s"test - Pending data size for host ${pendingDataSizeForHost}")
+      //logInfo(s"test - Pending data size for host ${pendingDataSizeForHost}")
   }
 
   var maxHost: (String, Int) = ("", 0)

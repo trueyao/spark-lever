@@ -52,6 +52,7 @@ private[spark] class WorkerMonitor(
   private var totalPendingTask = 0
   private var totalPendingTaskSize = 0L
   private var totalHandledDataSize = 0L
+  private var totalExecuteTime = 0L
   private var batchDuration = 0L
 
   override def preStart() = {
@@ -88,6 +89,11 @@ private[spark] class WorkerMonitor(
         totalHandledDataSize += size
       }
 
+    case ExecutorFinishedTaskData(size, time, executorId) =>
+      logInfo(s"executor handled data size ${size},, executor ${executorId}")
+      totalExecuteTime += time
+      totalHandledDataSize += size
+
     case RegisterExecutorInWorkerMonitor(executorId) =>
       executors(executorId) = sender
       logInfo(s"Register executor ${executorId}")
@@ -115,9 +121,11 @@ private[spark] class WorkerMonitor(
     case QueryEstimateDataSize =>
       sender ! WorkerEstimateDataSize(forecastDataSize, totalHandledDataSize,  workerId, host)
       totalHandledDataSize = 0L
+      totalExecuteTime = 0L
   }
 
   private def forecastDataSize: Long = {
+    /**
     var workerSpeed = 0.0
     for (executorSpeed <- executorHandleSpeed) {
       workerSpeed += executorSpeed._2
@@ -127,6 +135,12 @@ private[spark] class WorkerMonitor(
       ((batchDuration - (totalPendingTaskSize / workerSpeed)) * workerSpeed).toLong
     } else {
       0L
+    }
+    */
+    if (totalExecuteTime != 0){
+      ((totalHandledDataSize*1.0 / totalExecuteTime) * batchDuration).toLong
+    }else{
+       0L
     }
   }
 

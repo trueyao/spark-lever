@@ -266,7 +266,8 @@ private[spark] class Executor(
           }
         }
 
-        execBackend.handledDataUpdate(taskId, taskStart, taskFinish, handledDataSize)
+        //execBackend.handledDataUpdate(taskId, taskStart, taskFinish, handledDataSize)
+        execBackend.FinishedTaskDataUpdate(taskId, taskStart, taskFinish, handledDataSize)
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
 
       } catch {

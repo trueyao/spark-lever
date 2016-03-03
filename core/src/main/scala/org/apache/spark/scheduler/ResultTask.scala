@@ -59,7 +59,9 @@ private[spark] class ResultTask[T, U](
 
     metrics = Some(context.taskMetrics)
     //(rdd.getRddBlockSize(partition), func(context, rdd.iterator(partition, context)))
-    (metrics.get.shuffleReadMetrics.map(_.totalBytesRead).getOrElse(0L), func(context, rdd.iterator(partition, context)))
+    val result = func(context, rdd.iterator(partition, context))
+    (metrics.get.shuffleReadMetrics.map(_.totalBytesRead).getOrElse(0L), result)
+    //(metrics.get.shuffleReadMetrics.map(_.totalBytesRead).getOrElse(0L), func(context, rdd.iterator(partition, context)))
   }
 
   // This is only callable on the driver side.
