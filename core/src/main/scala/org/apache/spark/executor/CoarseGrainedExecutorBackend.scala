@@ -155,7 +155,7 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
   override def FinishedTaskDataUpdate(taskId: Long, startTime: Long, endTime: Long, dataSize: Long): Unit = {
     val executionTime = endTime - startTime
-    logInfo(s"executor ${executorId} finished task ${taskId} in ${executionTime}," +
+    logInfo(s"executor ${executorId} finished task TID[${taskId}] in ${executionTime} ms," +
       s" handled dataSize is ${dataSize} bytes")
     workerMonitor ! ExecutorFinishedTaskData(dataSize, executionTime, executorId)
   }

@@ -43,6 +43,8 @@ class LocalSparkCluster(
   private val localHostname = Utils.localHostName()
   private val masterActorSystems = ArrayBuffer[ActorSystem]()
   private val workerActorSystems = ArrayBuffer[ActorSystem]()
+  private val jobMonitorActorSystems = ArrayBuffer[ActorSystem]()
+  private val workerMonitorActorSystems = ArrayBuffer[ActorSystem]()
 
   def start(): Array[String] = {
     logInfo("Starting a local Spark cluster with " + numWorkers + " workers.")
@@ -51,16 +53,20 @@ class LocalSparkCluster(
     val _conf = conf.clone().setIfMissing("spark.master.rest.enabled", "false")
 
     /* Start the Master */
-    val (masterSystem, masterPort, _, _) = Master.startSystemAndActor(localHostname, 0, 0, _conf)
+    val (masterSystem, masterPort, _, _,jobMonitorActorSystem, _) = Master.startSystemAndActor(
+      localHostname, 0, 0, _conf)
     masterActorSystems += masterSystem
+    jobMonitorActorSystems += jobMonitorActorSystem
+
     val masterUrl = "spark://" + localHostname + ":" + masterPort
     val masters = Array(masterUrl)
 
     /* Start the Workers */
     for (workerNum <- 1 to numWorkers) {
-      val (workerSystem, _) = Worker.startSystemAndActor(localHostname, 0, 0, coresPerWorker,
+      val (workerSystem, _, monitorActorSystem, _) = Worker.startSystemAndActor(localHostname, 0, 0, coresPerWorker,
         memoryPerWorker, masters, null, Some(workerNum), _conf)
       workerActorSystems += workerSystem
+      workerMonitorActorSystems += monitorActorSystem
     }
 
     masters
@@ -72,10 +78,14 @@ class LocalSparkCluster(
     // TODO: In Akka 2.1.x, ActorSystem.awaitTermination hangs when you have remote actors!
     //       This is unfortunate, but for now we just comment it out.
     workerActorSystems.foreach(_.shutdown())
+    workerMonitorActorSystems.foreach(_.shutdown())
     // workerActorSystems.foreach(_.awaitTermination())
     masterActorSystems.foreach(_.shutdown())
+    jobMonitorActorSystems.foreach(_.shutdown())
     // masterActorSystems.foreach(_.awaitTermination())
     masterActorSystems.clear()
+    workerActorSystems.clear()
+    jobMonitorActorSystems.clear()
     workerActorSystems.clear()
   }
 }
