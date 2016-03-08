@@ -100,7 +100,7 @@ private[spark] class JobMonitor(master: ActorRef,
       for (workerMonitor <- workerMonitors) {
         workerMonitor._2 ! QueryEstimateDataSize
       }
-      timer.schedule(new updateDataLocation(), 0)
+      timer.schedule(new updateDataLocation(), batchDuration / 3)
 
     //From WorkerMonitor
     case WorkerEstimateDataSize(estimateDataSize, handledDataSize, workerId, host) =>
