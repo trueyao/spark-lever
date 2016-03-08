@@ -553,9 +553,10 @@ private[spark] object Worker extends Logging {
     SignalLogger.register(log)
     val conf = new SparkConf
     val args = new WorkerArguments(argStrings, conf)
-    val (actorSystem, _) = startSystemAndActor(args.host, args.port, args.webUiPort, args.cores,
-      args.memory, args.masters, args.workDir)
+    val (actorSystem, _, monitorActorSystem, _) = startSystemAndActor(args.host, args.port,
+      args.webUiPort, args.cores, args.memory, args.masters, args.workDir)
     actorSystem.awaitTermination()
+    monitorActorSystem.awaitTermination()
   }
 
   def startSystemAndActor(
@@ -567,7 +568,7 @@ private[spark] object Worker extends Logging {
       masterUrls: Array[String],
       workDir: String,
       workerNumber: Option[Int] = None,
-      conf: SparkConf = new SparkConf): (ActorSystem, Int) = {
+      conf: SparkConf = new SparkConf): (ActorSystem, Int, ActorSystem, Int) = {
 
     // The LocalSparkCluster runs multiple local sparkWorkerX actor systems
     val systemName = "sparkWorker" + workerNumber.map(_.toString).getOrElse("")
@@ -591,7 +592,7 @@ private[spark] object Worker extends Logging {
     monitorActorSystem.actorOf(Props(classOf[WorkerMonitor], workerActor, monitorSystemName, host,
       monitorBoundPort, monitorActorName), name = monitorActorName)
 
-    (actorSystem, boundPort)
+    (actorSystem, boundPort, monitorActorSystem, monitorBoundPort)
   }
 
   private[spark] def isUseLocalNodeSSLConfig(cmd: Command): Boolean = {

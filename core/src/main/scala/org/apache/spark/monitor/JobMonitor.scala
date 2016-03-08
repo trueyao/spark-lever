@@ -49,8 +49,8 @@ private[spark] class JobMonitor(master: ActorRef,
   val workerEstimateDataSize = new HashMap[String, Long]
   val workerToHost = new HashMap[String, String]
   var receiverTracker: ActorRef = null
-  var timer: Timer = null
-  var hasTimerCancel = true
+  //var timer: Timer = null
+  val timer: Timer = new Timer("JobMonitorTimer",true)
 
   override def preStart() = {
     logInfo("Start job monitor")
@@ -95,13 +95,10 @@ private[spark] class JobMonitor(master: ActorRef,
         timer.schedule(new updateDataLocation(), batchDuration / 3, batchDuration * 2)
       }
       */
-      if (hasTimerCancel){
-        for (workerMonitor <- workerMonitors) {
-          workerMonitor._2 ! QueryEstimateDataSize
-        }
-        timer = new Timer()
-        timer.schedule(new updateDataLocation(), batchDuration / 3, batchDuration * 2)
+      for (workerMonitor <- workerMonitors) {
+        workerMonitor._2 ! QueryEstimateDataSize
       }
+      timer.schedule(new updateDataLocation(), 0)
 
     //From WorkerMonitor
     case WorkerEstimateDataSize(estimateDataSize, handledDataSize, workerId, host) =>
@@ -154,8 +151,6 @@ private[spark] class JobMonitor(master: ActorRef,
     if(receiverTracker != null) {
       receiverTracker ! DataReallocateTable(result)
     }
-    timer.cancel()   //timer取消，而每一个JobFinished(time)事件都会重新启动一个timer,那是否说明每一个job结束后都会调用updateDataLocation()
-    hasTimerCancel = true                                                                 //是否更新频率太快，或者参考的数据太少？
   }
 
   private class updateDataLocation() extends TimerTask {
@@ -192,6 +187,9 @@ private[spark] class JobMonitor(master: ActorRef,
       sendDataToCertainLocation(hostList.take(3))
 
     }
+  }
+  override def postStop() {
+    timer.cancel()
   }
 
 }

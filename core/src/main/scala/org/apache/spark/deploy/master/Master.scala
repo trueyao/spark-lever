@@ -878,8 +878,10 @@ private[spark] object Master extends Logging {
     SignalLogger.register(log)
     val conf = new SparkConf
     val args = new MasterArguments(argStrings, conf)
-    val (actorSystem, _, _, _) = startSystemAndActor(args.host, args.port, args.webUiPort, conf)
+    val (actorSystem, _, _, _, jobMonitorActorSystem, _) = startSystemAndActor(args.host,
+      args.port, args.webUiPort, conf)
     actorSystem.awaitTermination()
+    jobMonitorActorSystem.awaitTermination()
   }
 
   /**
@@ -913,7 +915,7 @@ private[spark] object Master extends Logging {
       host: String,
       port: Int,
       webUiPort: Int,
-      conf: SparkConf): (ActorSystem, Int, Int, Option[Int]) = {
+      conf: SparkConf): (ActorSystem, Int, Int, Option[Int], ActorSystem, Int) = {
     val securityMgr = new SecurityManager(conf)
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port, conf = conf,
       securityManager = securityMgr)
@@ -933,6 +935,7 @@ private[spark] object Master extends Logging {
     jobMonitorActorSystem.actorOf(Props(classOf[JobMonitor], actor, jobMonitorSystemName, host,
       jobMonitorBoundPort, jobMonitorActorName), name = jobMonitorActorName)
 
-    (actorSystem, boundPort, portsResponse.webUIPort, portsResponse.restPort)
+    (actorSystem, boundPort, portsResponse.webUIPort, portsResponse.restPort,
+      jobMonitorActorSystem, jobMonitorBoundPort)
   }
 }
