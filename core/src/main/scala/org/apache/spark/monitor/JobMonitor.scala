@@ -23,6 +23,7 @@ import org.apache.spark.util.{AkkaUtils, ActorLogReceive}
 
 import akka.actor._
 
+import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import java.util.{Timer, TimerTask}
@@ -100,7 +101,7 @@ private[spark] class JobMonitor(master: ActorRef,
       for (workerMonitor <- workerMonitors) {
         workerMonitor._2 ! QueryEstimateDataSize
       }
-      timer.schedule(new updateDataLocation(), batchDuration / 3)
+      timer.schedule(new updateDataLocation2(), batchDuration / 3)
 
     //From WorkerMonitor
     case WorkerEstimateDataSize(estimateDataSize, handledDataSize, workerId, host) =>
@@ -152,6 +153,30 @@ private[spark] class JobMonitor(master: ActorRef,
     logInfo(s"test - data reallocate result ${result}")
     if(receiverTracker != null) {
       receiverTracker ! DataReallocateTable(result)
+    }
+  }
+
+  def sendDataToCertainLocation2(hostList: HashMap[String, Long]) = {
+    val result = new HashMap[String,Double]
+    val allSize = hostList.values.sum
+    val averageRatio = 1.0 / hostList.size
+    val zeroHost = hostList.filter(_._2 == 0L)
+    zeroHost.map(host => result(host._1) = averageRatio)
+    val leftRatio = 1.0 - zeroHost.size * averageRatio
+    hostList.filter(_._2 != 0L).map(host => result(host._1) = (host._2.toDouble / allSize) * leftRatio)
+    logInfo(s"test - data reallocate result ${result}")
+    if(receiverTracker != null) {
+      receiverTracker ! DataReallocateTable(result)
+    }
+  }
+
+  private class updateDataLocation2() extends TimerTask {
+    override def run() = {
+      val hostToEstimateDataSize = new HashMap[String, Long]
+      for (worker <- workerToHost) {
+        hostToEstimateDataSize(worker._2) = hostToEstimateDataSize.getOrElseUpdate(worker._2, 0L) + workerEstimateDataSize(worker._1)
+      }
+      sendDataToCertainLocation2(hostToEstimateDataSize)
     }
   }
 
