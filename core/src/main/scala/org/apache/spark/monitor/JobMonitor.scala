@@ -45,12 +45,12 @@ private[spark] class JobMonitor(master: ActorRef,
     actorName)
   val workerMonitors = new HashMap[String, ActorRef]
   var batchDuration = 0L
-  val pendingDataSizeForHost = new HashMap[String, Long]
+  //val pendingDataSizeForHost = new HashMap[String, Long]
   val workerEstimateDataSize = new HashMap[String, Long]
   val workerToHost = new HashMap[String, String]
   var receiverTracker: ActorRef = null
   //var timer: Timer = null
-  val timer: Timer = new Timer("JobMonitorTimer",true)
+  val timer: Timer = new Timer("JobMonitorTimer")
 
   override def preStart() = {
     logInfo("Start job monitor")
@@ -77,11 +77,13 @@ private[spark] class JobMonitor(master: ActorRef,
     //From ReceiverTrackerActor
     case ReceivedDataSize(host, size) =>
       logInfo(s"test - received data size ${size} in host ${host}")
+      /**
       if (pendingDataSizeForHost.contains(host)) {
         pendingDataSizeForHost(host) += size
       } else {
         pendingDataSizeForHost(host) = size
       }
+      */
     //From JobScheduler
     case JobSetFinished(totalDelay, forTime, processingDelay) =>
       logInfo(s"jobset for time:${forTime} finished, totalDelay ${totalDelay} ms, execution ${processingDelay} ms")
