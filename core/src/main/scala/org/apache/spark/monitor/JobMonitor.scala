@@ -105,7 +105,8 @@ private[spark] class JobMonitor(master: ActorRef,
 
     //From WorkerMonitor
     case WorkerEstimateDataSize(estimateDataSize, handledDataSize, workerId, host) =>
-      logInfo(s"host ${host}, workerId ${workerId}, handledDataSize ${handledDataSize}, estimateDataSize ${estimateDataSize}")
+      logInfo(s"host ${host}, workerId ${workerId}, handledDataSize ${handledDataSize} bytes," +
+        s" estimateDataSize ${estimateDataSize} bytes")
       /**
       if (!pendingDataSizeForHost.contains(host)) {
         pendingDataSizeForHost(host) = 0L

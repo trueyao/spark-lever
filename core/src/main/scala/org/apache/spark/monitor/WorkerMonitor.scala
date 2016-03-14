@@ -78,6 +78,7 @@ private[spark] class WorkerMonitor(
     case ExecutorHandledDataSpeed(size, speed, executorId) =>
       logInfo(s"executor handled data size ${size}, speed ${speed}, executor ${executorId}")
       executorHandleSpeed(executorId) = speed
+      /**
 //      totalPendingTask -= 1
       if (size > 0) {
         if (totalPendingTaskSize > size) {
@@ -88,9 +89,11 @@ private[spark] class WorkerMonitor(
         }
         totalHandledDataSize += size
       }
+        */
+      totalHandledDataSize += size
 
     case ExecutorFinishedTaskData(size, time, executorId) =>
-      logInfo(s"executor handled data size ${size},, executor ${executorId}")
+      logInfo(s"executor handled data size ${size} bytes, executor ${executorId}")
       totalExecuteTime += time
       totalHandledDataSize += size
 
@@ -125,23 +128,23 @@ private[spark] class WorkerMonitor(
   }
 
   private def forecastDataSize: Long = {
-    /**
     var workerSpeed = 0.0
     for (executorSpeed <- executorHandleSpeed) {
       workerSpeed += executorSpeed._2
     }
 
     if (workerSpeed != 0.0) {
-      ((batchDuration - (totalPendingTaskSize / workerSpeed)) * workerSpeed).toLong
+      (batchDuration * workerSpeed).toLong
     } else {
       0L
     }
-    */
+    /**
     if (totalExecuteTime != 0){
       ((totalHandledDataSize*1.0 / totalExecuteTime) * batchDuration).toLong
     }else{
        0L
     }
+      */
   }
 
 }
