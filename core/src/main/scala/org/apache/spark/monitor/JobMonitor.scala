@@ -48,6 +48,7 @@ private[spark] class JobMonitor(master: ActorRef,
   var batchDuration = 0L
   //val pendingDataSizeForHost = new HashMap[String, Long]
   val workerEstimateDataSize = new HashMap[String, Long]
+  val workerHandledDataSize = new HashMap[String, Long]
   val workerToHost = new HashMap[String, String]
   var receiverTracker: ActorRef = null
   //var timer: Timer = null
@@ -63,9 +64,10 @@ private[spark] class JobMonitor(master: ActorRef,
     case RegisteredJobMonitor =>
       logInfo(s"Registed jobMonitor in master ${sender}")
     //From WorkerMonitor
-    case RegisterWorkerMonitorInJobMonitor(workerId) =>
+    case RegisterWorkerMonitorInJobMonitor(workerId, host) =>
       logInfo(s"registerd monitor ${sender} with worker id ${workerId}")
       workerMonitors(workerId) = sender
+      workerToHost(workerId) = host
       sender ! RegisteredWorkerMonitorInJobMonitor
     //From ReceiverTrackerActor
     case BatchDuration(duration) =>
@@ -86,7 +88,7 @@ private[spark] class JobMonitor(master: ActorRef,
       }
       */
     //From JobScheduler
-    case JobSetFinished(totalDelay, forTime, processingDelay) =>
+    case JobSetFinished(totalDelay, forTime, processingDelay, totalReceivedSize) =>
       logInfo(s"jobset for time:${forTime} finished, totalDelay ${totalDelay} ms, execution ${processingDelay} ms")
       /**
       if (pendingDataSizeForHost.size != 0 && hasTimerCancel) {
@@ -98,10 +100,19 @@ private[spark] class JobMonitor(master: ActorRef,
         timer.schedule(new updateDataLocation(), batchDuration / 3, batchDuration * 2)
       }
       */
-      for (workerMonitor <- workerMonitors) {
-        workerMonitor._2 ! QueryEstimateDataSize
+      if(totalReceivedSize > 0){
+        for (workerMonitor <- workerMonitors) {
+          workerMonitor._2 ! QueryEstimateDataSize
+        }
+        timer.schedule(new updateDataLocation2(forTime), batchDuration / 3)
+      }else {
+        val result = new HashMap[String, Double]
+        val averageRatio = 1.0 / workerToHost.values.toSet.size
+        workerToHost.map(i => result(i._2) = averageRatio)
+        if(receiverTracker != null) {
+          receiverTracker ! DataReallocateTable(result)
+        }
       }
-      timer.schedule(new updateDataLocation2(), batchDuration / 3)
 
     //From WorkerMonitor
     case WorkerEstimateDataSize(estimateDataSize, handledDataSize, workerId, host) =>
@@ -114,6 +125,7 @@ private[spark] class JobMonitor(master: ActorRef,
       pendingDataSizeForHost(host) -= handledDataSize       //可能产生负值？
       */
       workerEstimateDataSize(workerId) = estimateDataSize
+      workerHandledDataSize(workerId) = handledDataSize
       workerToHost(workerId) = host
       //logInfo(s"test - Pending data size for host ${pendingDataSizeForHost}")
   }
@@ -171,12 +183,17 @@ private[spark] class JobMonitor(master: ActorRef,
     }
   }
 
-  private class updateDataLocation2() extends TimerTask {
+  private class updateDataLocation2(jobSetTime:String) extends TimerTask {
     override def run() = {
       val hostToEstimateDataSize = new HashMap[String, Long]
+      val jobSetHandledDataSize = workerHandledDataSize.values.sum
       for (worker <- workerToHost) {
         hostToEstimateDataSize(worker._2) = hostToEstimateDataSize.getOrElseUpdate(worker._2, 0L) + workerEstimateDataSize(worker._1)
       }
+      logInfo(s"test - jobset for time:${jobSetTime} totally handled ${jobSetHandledDataSize} bytes")
+      workerEstimateDataSize.clear()
+      workerHandledDataSize.clear()
+      workerToHost.clear()
       sendDataToCertainLocation2(hostToEstimateDataSize)
     }
   }

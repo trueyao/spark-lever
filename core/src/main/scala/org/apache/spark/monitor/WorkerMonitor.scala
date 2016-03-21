@@ -70,7 +70,7 @@ private[spark] class WorkerMonitor(
     case JobMonitorUrlForWorkerMonitor(url) =>
       logInfo(s"job Monitor url is ${url}")
       jobMonitor = context.actorSelection(url)
-      jobMonitor ! RegisterWorkerMonitorInJobMonitor(workerId)
+      jobMonitor ! RegisterWorkerMonitorInJobMonitor(workerId, host)
 
     case RegisteredWorkerMonitorInJobMonitor =>
       logInfo(s"Registered in job monitor ${sender}")

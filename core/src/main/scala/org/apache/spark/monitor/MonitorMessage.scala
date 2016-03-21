@@ -88,7 +88,8 @@ private[spark] object JobMonitorMessages {
   case class UpdateFunction(needSplit: Boolean, workerDataRatio: HashMap[String, Double]) extends JobMonitorMessage
 
   // JobScheduler to JobMonitor
-  case class JobSetFinished(totalDelay: Long, forTime: String, processingDelay: Long) extends JobMonitorMessage
+  case class JobSetFinished(totalDelay: Long, forTime: String, processingDelay: Long, totalReceivedDataSize: Long)
+    extends JobMonitorMessage
 }
 
 private[spark] sealed trait MonitorMessage extends Serializable
@@ -97,7 +98,7 @@ private[spark] object MonitorMessages {
 
   // WorkerMonitor to JobMonitor
   // Added by Liuzhiyi
-  case class RegisterWorkerMonitorInJobMonitor(workerId: String) extends MonitorMessage
+  case class RegisterWorkerMonitorInJobMonitor(workerId: String, host:String) extends MonitorMessage
 
   case class WorkerEstimateDataSize(estimateDataSize: Long, handledDataSize: Long, workerId: String, host: String)
     extends MonitorMessage
