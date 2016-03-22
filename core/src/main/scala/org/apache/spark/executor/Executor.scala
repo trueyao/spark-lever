@@ -265,8 +265,9 @@ private[spark] class Executor(
             serializedDirectResult
           }
         }
-
-        execBackend.handledDataUpdate(taskId, taskStart, taskFinish, handledDataSize)
+        if (task.isInstanceOf[ShuffleMapTask]){  //now,we only consider shuffleMapTask
+          execBackend.handledDataUpdate(taskId, taskStart, taskFinish, handledDataSize)
+        }
         //execBackend.FinishedTaskDataUpdate(taskId, taskStart, taskFinish, handledDataSize)
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
 
