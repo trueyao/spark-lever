@@ -105,6 +105,7 @@ private[spark] class JobMonitor(master: ActorRef,
           workerMonitor._2 ! QueryEstimateDataSize
         }
         timer.schedule(new updateDataLocation2(forTime), batchDuration / 3)
+        logInfo(s"This jobset received ${totalReceivedSize} bytes in all.")
       }else {
         val result = new HashMap[String, Double]
         val averageRatio = 1.0 / workerToHost.values.toSet.size
@@ -112,6 +113,7 @@ private[spark] class JobMonitor(master: ActorRef,
         if(receiverTracker != null) {
           receiverTracker ! DataReallocateTable(result)
         }
+        logInfo("This jobset received no data.")
       }
 
     //From WorkerMonitor
