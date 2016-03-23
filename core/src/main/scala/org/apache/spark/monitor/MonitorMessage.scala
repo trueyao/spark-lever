@@ -88,7 +88,7 @@ private[spark] object JobMonitorMessages {
   case class UpdateFunction(needSplit: Boolean, workerDataRatio: HashMap[String, Double]) extends JobMonitorMessage
 
   // JobScheduler to JobMonitor
-  case class JobSetFinished(totalDelay: Long, forTime: String, processingDelay: Long, totalReceivedDataSize: Long)
+  case class JobSetFinished(totalDelay: Long, forTime: Long, processingDelay: Long, totalReceivedDataSize: Long)
     extends JobMonitorMessage
 }
 
