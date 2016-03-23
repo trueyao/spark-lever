@@ -25,6 +25,7 @@ import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.util.RecurringTimer
 import org.apache.spark.util.SystemClock
+import org.apache.spark.util.SizeEstimator
 
 /** Listener object for BlockGenerator events */
 private[streaming] trait BlockGeneratorListener {
@@ -196,15 +197,16 @@ private[streaming] class BlockGenerator(
     if(nowTime == nextBatchTime) {
       splitRatio = newSplitRatio.clone()
     }
+    logInfo(s"The split ratio at ${nowTime} is ${splitRatio}")
     val splitNum = splitRatio.size
     if (splitNum == 0) {
       Seq(blockBuffer)
     } else {
       val oldBlockBuffer = blockBuffer
       var newBlockBuffers = Seq[ArrayBuffer[Any]]()
-      (0 until splitNum).map { i =>  //until splitNum, i 最大为splitNum-1 ,所以之后的else不会起作用.16/2/21修正
+      (0 until splitNum).map { i =>
         if (i != splitNum-1) {
-          val everyNewBlockBufferLength: Int = (blockBuffer.size * splitRatio(i)).toInt //有隐患，如5*0.3和5*0.7，化整之后会丢失block
+          val everyNewBlockBufferLength: Int = (blockBuffer.size * splitRatio(i)).toInt
           val newBlockBuffer = oldBlockBuffer.take(everyNewBlockBufferLength)
           oldBlockBuffer --= newBlockBuffer
           newBlockBuffers = newBlockBuffers :+ newBlockBuffer
