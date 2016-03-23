@@ -99,7 +99,7 @@ private[spark] class JobMonitor(master: ActorRef,
         val averageRatio = 1.0 / workerToHost.values.toSet.size
         workerToHost.map(i => result(i._2) = averageRatio)
         if(receiverTracker != null) {
-          receiverTracker ! DataReallocateTable(result, forTime.toLong + batchDuration)
+          receiverTracker ! DataReallocateTable(result, forTime + batchDuration)
         }
         logInfo("This jobset received no data.")
       }
@@ -128,7 +128,7 @@ private[spark] class JobMonitor(master: ActorRef,
     }
   }
 
-  private class updateDataLocation2(jobSetTime:String) extends TimerTask {
+  private class updateDataLocation2(jobSetTime: Long) extends TimerTask {
     override def run() = {
       val hostToEstimateDataSize = new HashMap[String, Long]
       val jobSetHandledDataSize = workerHandledDataSize.values.sum
@@ -139,7 +139,7 @@ private[spark] class JobMonitor(master: ActorRef,
       workerEstimateDataSize.clear()
       workerHandledDataSize.clear()
       workerToHost.clear()
-      sendDataToCertainLocation2(hostToEstimateDataSize, jobSetTime.toLong + batchDuration)
+      sendDataToCertainLocation2(hostToEstimateDataSize, jobSetTime + batchDuration)
     }
   }
 
