@@ -50,6 +50,8 @@ private[spark] class JobMonitor(master: ActorRef,
   val workerEstimateDataSize = new HashMap[String, Long]
   val workerHandledDataSize = new HashMap[String, Long]
   val workerToHost = new HashMap[String, String]
+  val workercores = new HashMap[String, Int]
+  val workermemory = new HashMap[String, Int]
   var receiverTracker: ActorRef = null
   //var timer: Timer = null
   val timer: Timer = new Timer("JobMonitorTimer")
@@ -64,10 +66,12 @@ private[spark] class JobMonitor(master: ActorRef,
     case RegisteredJobMonitor =>
       logInfo(s"Registed jobMonitor in master ${sender}")
     //From WorkerMonitor
-    case RegisterWorkerMonitorInJobMonitor(workerId, host) =>
+    case RegisterWorkerMonitorInJobMonitor(workerId, host, cores, memory) =>
       logInfo(s"registerd monitor ${sender} with worker id ${workerId}")
       workerMonitors(workerId) = sender
       workerToHost(workerId) = host
+      workercores(workerId) = cores
+      workermemory(workerId) = memory
       sender ! RegisteredWorkerMonitorInJobMonitor
     //From ReceiverTrackerActor
     case BatchDuration(duration) =>

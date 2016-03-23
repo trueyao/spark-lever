@@ -62,6 +62,22 @@ case class JobSet(
     processingEndTime - time.milliseconds
   }
 
+  //statistics for total data size of each jobset
+  //Added by chenfei
+  def totalsize: Long = {
+    var totalsum = 0L
+    var arraysum = 0L
+    receivedBlockInfo.keys.foreach{
+      i => {
+        for(elem <- receivedBlockInfo(i)){
+          arraysum += elem.totalSize
+        }
+      }
+        totalsum += arraysum
+    }
+    totalsum
+  }
+
   def toBatchInfo: BatchInfo = {
     new BatchInfo(
       time,

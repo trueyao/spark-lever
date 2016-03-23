@@ -43,7 +43,7 @@ private[spark] object WorkerMonitorMessages {
 
   // Worker to WorkerMonitor
   //Added by Liuzhiyi
-  case class RegisteredWorkerMonitor(workerId: String) extends WorkerMonitorMessage
+  case class RegisteredWorkerMonitor(workerId: String, cores: Int, memory: Int) extends WorkerMonitorMessage
 
   case class JobMonitorUrlForWorkerMonitor(url: String) extends WorkerMonitorMessage
 
@@ -98,7 +98,7 @@ private[spark] object MonitorMessages {
 
   // WorkerMonitor to JobMonitor
   // Added by Liuzhiyi
-  case class RegisterWorkerMonitorInJobMonitor(workerId: String, host:String) extends MonitorMessage
+  case class RegisterWorkerMonitorInJobMonitor(workerId: String, host:String, cores: Int, memory:Int) extends MonitorMessage
 
   case class WorkerEstimateDataSize(estimateDataSize: Long, handledDataSize: Long, workerId: String, host: String)
     extends MonitorMessage

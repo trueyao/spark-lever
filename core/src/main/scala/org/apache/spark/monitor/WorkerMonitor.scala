@@ -47,6 +47,8 @@ private[spark] class WorkerMonitor(
     port,
     actorName)
   private var workerId = ""
+  private var cores: Int = 0
+  private var memory: Int = 0
   private var jobMonitor: ActorSelection = null
   private val schedulerBackendToTasks = new HashMap[ActorRef, HashSet[Long]]
   private var totalPendingTask = 0
@@ -62,15 +64,17 @@ private[spark] class WorkerMonitor(
   }
 
   override def receiveWithLogging = {
-    case RegisteredWorkerMonitor(registeredWorkerId) =>
+    case RegisteredWorkerMonitor(registeredWorkerId, regcores, regmemory) =>
       workerId = registeredWorkerId
+      cores = regcores
+      memory = regmemory
       logInfo(s"Registered worker monitor with host:${registeredWorkerId}")
 //      worker ! RequestJobMonitorUrlForWorkerMonitor
     //From Worker's case JobMonitorUrl(url)
     case JobMonitorUrlForWorkerMonitor(url) =>
       logInfo(s"job Monitor url is ${url}")
       jobMonitor = context.actorSelection(url)
-      jobMonitor ! RegisterWorkerMonitorInJobMonitor(workerId, host)
+      jobMonitor ! RegisterWorkerMonitorInJobMonitor(workerId, host, cores, memory)
 
     case RegisteredWorkerMonitorInJobMonitor =>
       logInfo(s"Registered in job monitor ${sender}")

@@ -501,7 +501,7 @@ private[spark] class Worker(
     case RegisterWorkerMonitor(monitorAkkaUrls) =>
       logInfo("Registerd worker monitor " + monitorAkkaUrls)
       monitorAkkaUrl = monitorAkkaUrls
-      sender ! RegisteredWorkerMonitor(workerId)
+      sender ! RegisteredWorkerMonitor(workerId, cores, memory)
 
     case JobMonitorUrl(url) =>
       logInfo(s"jobMonitorUrl is ${url}")
