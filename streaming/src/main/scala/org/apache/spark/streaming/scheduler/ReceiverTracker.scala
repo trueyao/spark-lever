@@ -245,9 +245,9 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       case StreamingReceivedSize(size: Long, host: String) =>
         jobMonitor ! ReceivedDataSize(host, size)
       //From JobMonitor
-      case DataReallocateTable(result) =>
+      case DataReallocateTable(result, nextBatch) =>
         for(receiverActor <- receiverInfo) {
-          receiverActor._2.actor ! ReallocateTable(result)
+          receiverActor._2.actor ! ReallocateTable(result, nextBatch)
         }
     }
   }

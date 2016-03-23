@@ -80,26 +80,10 @@ private[spark] class JobMonitor(master: ActorRef,
     //From ReceiverTrackerActor
     case ReceivedDataSize(host, size) =>
       logInfo(s"test - received data size ${size} in host ${host}")
-      /**
-      if (pendingDataSizeForHost.contains(host)) {
-        pendingDataSizeForHost(host) += size
-      } else {
-        pendingDataSizeForHost(host) = size
-      }
-      */
+
     //From JobScheduler
     case JobSetFinished(totalDelay, forTime, processingDelay, totalReceivedSize) =>
       logInfo(s"jobset for time:${forTime} finished, totalDelay ${totalDelay} ms, execution ${processingDelay} ms")
-      /**
-      if (pendingDataSizeForHost.size != 0 && hasTimerCancel) {
-        hasTimerCancel = false
-        for (workerMonitor <- workerMonitors) {
-          workerMonitor._2 ! QueryEstimateDataSize
-        }
-        timer = new Timer()
-        timer.schedule(new updateDataLocation(), batchDuration / 3, batchDuration * 2)
-      }
-      */
       if(totalReceivedSize > 0){
         for (workerMonitor <- workerMonitors) {
           workerMonitor._2 ! QueryEstimateDataSize
@@ -111,7 +95,7 @@ private[spark] class JobMonitor(master: ActorRef,
         val averageRatio = 1.0 / workerToHost.values.toSet.size
         workerToHost.map(i => result(i._2) = averageRatio)
         if(receiverTracker != null) {
-          receiverTracker ! DataReallocateTable(result)
+          receiverTracker ! DataReallocateTable(result, forTime.toLong + batchDuration)
         }
         logInfo("This jobset received no data.")
       }
@@ -120,58 +104,13 @@ private[spark] class JobMonitor(master: ActorRef,
     case WorkerEstimateDataSize(estimateDataSize, handledDataSize, workerId, host) =>
       logInfo(s"host ${host}, workerId ${workerId}, handledDataSize ${handledDataSize} bytes," +
         s" estimateDataSize ${estimateDataSize} bytes")
-      /**
-      if (!pendingDataSizeForHost.contains(host)) {
-        pendingDataSizeForHost(host) = 0L
-      }
-      pendingDataSizeForHost(host) -= handledDataSize       //可能产生负值？
-      */
       workerEstimateDataSize(workerId) = estimateDataSize
       workerHandledDataSize(workerId) = handledDataSize
       workerToHost(workerId) = host
       //logInfo(s"test - Pending data size for host ${pendingDataSizeForHost}")
   }
 
-  var maxHost: (String, Int) = ("", 0)
-  /** 给每一个host:string分配一定比例:double的数据*/
-  def sendDataToCertainLocation(hostList: ArrayBuffer[(String, Long)]) = {
-    val maxRatio = 0.6
-    val result = new HashMap[String, Double]
-    if (hostList(2)._2 == 0) {
-      result(hostList(0)._1) = 1.0 / 3
-      result(hostList(1)._1) = 1.0 / 3
-      result(hostList(2)._1) = 1.0 / 3
-    } else if (hostList(0)._2 != 0) {
-      val allSize = hostList(0)._2 + hostList(1)._2 + hostList(2)._2
-      result(hostList(0)._1) = hostList(0)._2.toDouble / allSize
-      result(hostList(1)._1) = hostList(1)._2.toDouble / allSize
-      result(hostList(2)._1) = hostList(2)._2.toDouble / allSize
-      val max = result.filter(x => x._2 > maxRatio).keySet.toSeq
-      val other = result.filter(x => x._2 <= maxRatio).keySet.toSeq
-      if (max.size == 1) {
-        maxHost = if (max(0) == maxHost._1) (max(0), maxHost._2 + 1) else (max(0), 1)
-        val superRatio = (result(max(0)) - maxRatio) / 2
-        result(max(0)) = maxRatio
-        result(other(0)) += superRatio
-        result(other(1)) += superRatio
-      }
-    } else if (hostList(1)._2 == 0) {  //说明只有hostList(2)._1 有数据
-      result(hostList(0)._1) = 0.4
-      result(hostList(1)._1) = 0.4
-      result(hostList(2)._1) = 0.2
-    } else {                            //说明只有hostList(0)._1 没数据
-      val allSize = hostList(1)._2 + hostList(2)._2
-      result(hostList(0)._1) = 0.4
-      result(hostList(1)._1) = (hostList(1)._2.toDouble / allSize) * 0.6
-      result(hostList(2)._1) = (hostList(2)._2.toDouble / allSize) * 0.6
-    }
-    logInfo(s"test - data reallocate result ${result}")
-    if(receiverTracker != null) {
-      receiverTracker ! DataReallocateTable(result)
-    }
-  }
-
-  def sendDataToCertainLocation2(hostList: HashMap[String, Long]) = {
+  def sendDataToCertainLocation2(hostList: HashMap[String, Long], nextBatch: Long) = {
     val result = new HashMap[String,Double]
     val allSize = hostList.values.sum
     val averageRatio = 1.0 / hostList.size
@@ -181,7 +120,7 @@ private[spark] class JobMonitor(master: ActorRef,
     hostList.filter(_._2 != 0L).map(host => result(host._1) = (host._2.toDouble / allSize) * leftRatio)
     logInfo(s"test - data reallocate result ${result}")
     if(receiverTracker != null) {
-      receiverTracker ! DataReallocateTable(result)
+      receiverTracker ! DataReallocateTable(result, nextBatch)
     }
   }
 
@@ -196,45 +135,10 @@ private[spark] class JobMonitor(master: ActorRef,
       workerEstimateDataSize.clear()
       workerHandledDataSize.clear()
       workerToHost.clear()
-      sendDataToCertainLocation2(hostToEstimateDataSize)
+      sendDataToCertainLocation2(hostToEstimateDataSize, jobSetTime.toLong + batchDuration)
     }
   }
 
-  private class updateDataLocation() extends TimerTask {
-    override def run() = {
-      val hostList = new ArrayBuffer[(String, Long)]    //ArrayBuffer中的元素有先后顺序
-      val hostToEstimateDataSize = new HashMap[String, Long]
-      for (worker <- workerToHost) {
-        hostToEstimateDataSize(worker._2) = hostToEstimateDataSize.getOrElseUpdate(worker._2, 0L) + workerEstimateDataSize(worker._1)
-      }
-
-      if(maxHost._2 > 3) {   //3是该maxHost在历史统计中出现的次数，人为设定的
-        hostToEstimateDataSize.remove(maxHost._1)
-        maxHost = (maxHost._1, maxHost._2 - 1)
-      }
-
-      for (zeroHost <- hostToEstimateDataSize) {    //首先将hostEstimateDataSize==0的host加入到hostList中
-        if (zeroHost._2 == 0L) {
-          hostList.append(zeroHost)
-          hostToEstimateDataSize.remove(zeroHost._1)
-        }
-      }
-      val size = hostToEstimateDataSize.size
-      for (i <- 0 until size) {
-        var max:(String, Long) = ("", 0L)
-        for (line <- hostToEstimateDataSize) {
-          if (line._2 > max._2) {
-            max = line
-          }
-        }
-        hostList.append(max)      //其次将hostToEstimateDataSize里的host按EstimateDataSize降序加入到hostList中
-        hostToEstimateDataSize.remove(max._1)
-      }
-
-      sendDataToCertainLocation(hostList.take(3))
-
-    }
-  }
   override def postStop() {
     timer.cancel()
   }

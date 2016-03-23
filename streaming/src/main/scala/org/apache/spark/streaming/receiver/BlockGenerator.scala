@@ -90,6 +90,8 @@ private[streaming] class BlockGenerator(
   @volatile private var stopped = false
 
   private var splitRatio = new HashMap[Int, Double]
+  private var newSplitRatio = new HashMap[Int, Double]
+  private var nextBatchTime = 0L
 
   /** Start block generating and pushing threads. */
   def start() {
@@ -162,7 +164,7 @@ private[streaming] class BlockGenerator(
       val newBlockBuffer = currentBuffer
       currentBuffer = new ArrayBuffer[Any]
       if (newBlockBuffer.size > 0) {
-        val newBlockBuffers = splitBlockBuffer(newBlockBuffer)
+        val newBlockBuffers = splitBlockBuffer(newBlockBuffer, time)
         (0 until newBlockBuffers.size).map { i =>
           val blockId = StreamBlockId(receiverId, time - blockInterval, i)
           val newBlock = new Block(blockId, newBlockBuffers(i))
@@ -180,8 +182,9 @@ private[streaming] class BlockGenerator(
     }
   }
 
-  def changeSplitRatio(newRatio: HashMap[Int, Double]) = {
-    splitRatio = newRatio.clone()
+  def changeSplitRatio(newRatio: HashMap[Int, Double], nextBatch: Long) = {
+    nextBatchTime = nextBatch
+    newSplitRatio = newRatio.clone()
   }
 
   /**
@@ -189,7 +192,10 @@ private[streaming] class BlockGenerator(
    *
    * Added by Liuzhiyi
    */
-  private def splitBlockBuffer(blockBuffer: ArrayBuffer[Any]): Seq[ArrayBuffer[Any]] = {
+  private def splitBlockBuffer(blockBuffer: ArrayBuffer[Any], nowTime: Long): Seq[ArrayBuffer[Any]] = {
+    if(nowTime == nextBatchTime) {
+      splitRatio = newSplitRatio.clone()
+    }
     val splitNum = splitRatio.size
     if (splitNum == 0) {
       Seq(blockBuffer)
@@ -252,4 +258,5 @@ private[streaming] class BlockGenerator(
     listener.onPushBlock(block.id, block.buffer)
     logInfo("Pushed block " + block.id)
   }
+  def getNextBatchTime = nextBatchTime
 }

@@ -82,7 +82,7 @@ private[spark] object JobMonitorMessages {
   case class ReceivedDataSize(host: String, dataSize: Long) extends JobMonitorMessage
 
   //JobMonitor to Receiver
-  case class DataReallocateTable(table: HashMap[String, Double]) extends JobMonitorMessage
+  case class DataReallocateTable(table: HashMap[String, Double], nextBatch: Long) extends JobMonitorMessage
 
   // JobMonitor to BlockGenerator in spark streaming
   case class UpdateFunction(needSplit: Boolean, workerDataRatio: HashMap[String, Double]) extends JobMonitorMessage
