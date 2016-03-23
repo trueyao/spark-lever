@@ -620,10 +620,13 @@ private[spark] class BlockManager(
     require(blockId != null, "BlockId is null")
     val locations = Random.shuffle(master.getLocations(blockId))
     for (loc <- locations) {
-      logDebug(s"Getting remote block $blockId from $loc")
+      logInfo(s"Getting remote block $blockId from $loc")
+      val beforeFetchTime = System.currentTimeMillis()
       val data = blockTransferService.fetchBlockSync(
         loc.host, loc.port, loc.executorId, blockId.toString).nioByteBuffer()
 
+      logInfo(s"test - get remote block from ${loc.host} to ${blockManagerId.host}" +
+        s" in ${System.currentTimeMillis() - beforeFetchTime} ms")
       if (data != null) {
         if (asBlockResult) {
           return Some(new BlockResult(
