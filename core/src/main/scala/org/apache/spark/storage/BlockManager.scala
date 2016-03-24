@@ -625,7 +625,7 @@ private[spark] class BlockManager(
       val data = blockTransferService.fetchBlockSync(
         loc.host, loc.port, loc.executorId, blockId.toString).nioByteBuffer()
 
-      logInfo(s"test - get remote block from ${loc.host} to ${blockManagerId.host}" +
+      logInfo(s"test - get remote block ${blockId} from ${loc.host} to ${blockManagerId.host}" +
         s" in ${System.currentTimeMillis() - beforeFetchTime} ms")
       if (data != null) {
         if (asBlockResult) {

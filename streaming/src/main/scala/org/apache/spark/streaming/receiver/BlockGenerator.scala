@@ -202,20 +202,15 @@ private[streaming] class BlockGenerator(
     if (splitNum == 0) {
       Seq(blockBuffer)
     } else {
-      val oldBlockBuffer = blockBuffer
       var newBlockBuffers = Seq[ArrayBuffer[Any]]()
-      (0 until splitNum).map { i =>
-        if (i != splitNum-1) {
-          val everyNewBlockBufferLength: Int = (blockBuffer.size * splitRatio(i)).toInt
-          val newBlockBuffer = oldBlockBuffer.take(everyNewBlockBufferLength)
-          oldBlockBuffer --= newBlockBuffer
-          newBlockBuffers = newBlockBuffers :+ newBlockBuffer
-        } else {
-          val newBlockBuffer = oldBlockBuffer
-          newBlockBuffers = newBlockBuffers :+ newBlockBuffer
-        }
+      val totalSize = blockBuffer.size
+      var from = 0
+      (0 until (splitNum - 1)).map { i =>
+        val to = from + totalSize * splitRatio(i).toInt
+        newBlockBuffers = newBlockBuffers :+ blockBuffer.slice(from, to)  //slice is more efficient than take
+        from = to
       }
-
+      newBlockBuffers = newBlockBuffers :+ blockBuffer.slice(from, totalSize)
       newBlockBuffers
     }
   }
