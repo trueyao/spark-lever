@@ -206,7 +206,7 @@ private[streaming] class BlockGenerator(
       val totalSize = blockBuffer.size
       var from = 0
       (0 until (splitNum - 1)).map { i =>
-        val to = from + totalSize * splitRatio(i).toInt
+        val to = from + (totalSize * splitRatio(i)).toInt
         newBlockBuffers = newBlockBuffers :+ blockBuffer.slice(from, to)  //slice is more efficient than take
         from = to
       }
