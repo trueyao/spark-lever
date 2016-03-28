@@ -80,6 +80,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   private var jobMonitor: ActorSelection = null
   private var jobMoniorUrl: String = null
+  private var dataReallocateTable:HashMap[String, Double] = null
 
   /** Start the actor and receiver execution thread. */
   def start() = synchronized {
@@ -110,9 +111,18 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   }
 
   def dataReallocateTableNextBatch(result: HashMap[String, Double]): Unit ={
+    if (dataReallocateTable == null){
+      dataReallocateTable = result
+    }else {
+      for(receiverActor <- receiverInfo) {
+        receiverActor._2.actor ! ReallocateTable(result)
+      }
+    }
+    /**
     for(receiverActor <- receiverInfo) {
       receiverActor._2.actor ! ReallocateTable(result)
     }
+      */
   }
   /** Allocate all unallocated blocks to the given batch. */
   def allocateBlocksToBatch(batchTime: Time): Unit = {
@@ -162,6 +172,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
     receiverInfo(streamId) = ReceiverInfo(
       streamId, s"${typ}-${streamId}", receiverActor, true, host)
+    receiverActor ! ReallocateTable(dataReallocateTable) //Added by yy
     listenerBus.post(StreamingListenerReceiverStarted(receiverInfo(streamId)))
     logInfo("Registered receiver for stream " + streamId + " from " + sender.path.address)
   }
