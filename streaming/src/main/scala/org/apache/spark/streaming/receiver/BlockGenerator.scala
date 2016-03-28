@@ -248,5 +248,4 @@ private[streaming] class BlockGenerator(
     listener.onPushBlock(block.id, block.buffer)
     logInfo("Pushed block " + block.id)
   }
-  def getNextBatchTime = nextBatchTime
 }
