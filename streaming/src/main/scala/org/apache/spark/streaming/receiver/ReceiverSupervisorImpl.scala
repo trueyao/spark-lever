@@ -95,9 +95,11 @@ private[streaming] class ReceiverSupervisorImpl(
           //Added by LiuZhiYi
         //From ReceiverTracker
         case ReallocateTable(result) =>
+          /**
           if (!haveChangedFunc) {
             blockGenerator.changeUpdateFunction()  //将blockGenerator中blockIntervalTimer(定时器)的回调函数改成updateCurrentBufferWithSplit
           }                                         //以往是官方的updateCurrentBuffer
+            */
           val splitRatio = new HashMap[Int, Double]
           val blockIdToHost = new HashMap[Int, String]
           var number = 0
