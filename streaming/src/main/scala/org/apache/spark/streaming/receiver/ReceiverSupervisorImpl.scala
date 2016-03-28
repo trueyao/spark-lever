@@ -94,7 +94,7 @@ private[streaming] class ReceiverSupervisorImpl(
           cleanupOldBlocks(threshTime)
           //Added by LiuZhiYi
         //From ReceiverTracker
-        case ReallocateTable(result, nextBatch) =>
+        case ReallocateTable(result) =>
           if (!haveChangedFunc) {
             blockGenerator.changeUpdateFunction()  //将blockGenerator中blockIntervalTimer(定时器)的回调函数改成updateCurrentBufferWithSplit
           }                                         //以往是官方的updateCurrentBuffer
@@ -106,7 +106,7 @@ private[streaming] class ReceiverSupervisorImpl(
             splitRatio(number) = line._2
             number += 1
           }
-          blockGenerator.changeSplitRatio(splitRatio, nextBatch)  //按之前设定好的比例将原始接收到的一个block拆分成多个block
+          blockGenerator.changeSplitRatio(splitRatio)  //按之前设定好的比例将原始接收到的一个block拆分成多个block
           changeBlockIdToHostTable(blockIdToHost)
       }
 
@@ -194,9 +194,6 @@ private[streaming] class ReceiverSupervisorImpl(
     logInfo(s"test - Before reallocate, block name is ${blockId.name}")
     blockId.name match {
       case STREAM(streamId, uniqueId, sliceId) =>
-        if (uniqueId.toLong == blockGenerator.getNextBatchTime) {
-          blockIdToHostTable = newBlockIdToHostTable.clone()
-        }
         val slice = sliceId.toInt
         if ((blockIdToHostTable.size) != 0
           && slice < blockIdToHostTable.size
@@ -215,10 +212,9 @@ private[streaming] class ReceiverSupervisorImpl(
   }
 
   var blockIdToHostTable = new HashMap[Int, String]
-  var newBlockIdToHostTable = new HashMap[Int, String]
 
   def changeBlockIdToHostTable(newTable: HashMap[Int, String]) = {
-    newBlockIdToHostTable = newTable.clone()
+    blockIdToHostTable = newTable.clone()
   }
 
   /** Report error to the receiver tracker */

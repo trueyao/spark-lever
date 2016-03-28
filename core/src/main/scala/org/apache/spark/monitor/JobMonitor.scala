@@ -44,6 +44,7 @@ private[spark] class JobMonitor(master: ActorRef,
     host,
     port,
     actorName)
+  var jobScheduler: ActorRef = null
   val workerMonitors = new HashMap[String, ActorRef]
   var batchDuration = 0L
   //val pendingDataSizeForHost = new HashMap[String, Long]
@@ -73,6 +74,10 @@ private[spark] class JobMonitor(master: ActorRef,
       workercores(workerId) = cores
       workermemory(workerId) = memory
       sender ! RegisteredWorkerMonitorInJobMonitor
+    //From JobScheduler
+    case JobSchedulerEventActor(jobSched) =>
+      jobScheduler = jobSched
+
     //From ReceiverTrackerActor
     case BatchDuration(duration) =>
       receiverTracker = sender
@@ -98,9 +103,14 @@ private[spark] class JobMonitor(master: ActorRef,
         val result = new HashMap[String, Double]
         val averageRatio = 1.0 / workerToHost.values.toSet.size
         workerToHost.map(i => result(i._2) = averageRatio)
-        if(receiverTracker != null) {
-          receiverTracker ! DataReallocateTable(result, forTime + batchDuration)
+        if(jobScheduler != null) {
+          jobScheduler ! DataReallocateTable(result)
         }
+        /**
+        if(receiverTracker != null) {
+          receiverTracker ! DataReallocateTable(result)
+        }
+          */
         logInfo("This jobset received no data.")
       }
 
@@ -114,7 +124,7 @@ private[spark] class JobMonitor(master: ActorRef,
       //logInfo(s"test - Pending data size for host ${pendingDataSizeForHost}")
   }
 
-  def sendDataToCertainLocation2(hostList: HashMap[String, Long], nextBatch: Long) = {
+  def sendDataToCertainLocation2(hostList: HashMap[String, Long]) = {
     val result = new HashMap[String,Double]
     val allSize = hostList.values.sum
     val averageRatio = 1.0 / hostList.size
@@ -123,8 +133,8 @@ private[spark] class JobMonitor(master: ActorRef,
     val leftRatio = 1.0 - zeroHost.size * averageRatio
     hostList.filter(_._2 != 0L).map(host => result(host._1) = (host._2.toDouble / allSize) * leftRatio)
     logInfo(s"test - data reallocate result ${result}")
-    if(receiverTracker != null) {
-      receiverTracker ! DataReallocateTable(result, nextBatch)
+    if(jobScheduler != null) {
+      jobScheduler ! DataReallocateTable(result)
     }
   }
 
@@ -139,7 +149,7 @@ private[spark] class JobMonitor(master: ActorRef,
       workerEstimateDataSize.clear()
       workerHandledDataSize.clear()
       workerToHost.clear()
-      sendDataToCertainLocation2(hostToEstimateDataSize, jobSetTime + batchDuration)
+      sendDataToCertainLocation2(hostToEstimateDataSize)
     }
   }
 

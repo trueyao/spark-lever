@@ -19,6 +19,7 @@ package org.apache.spark.streaming.scheduler
 
 import scala.util.{Failure, Success, Try}
 import scala.collection.JavaConversions._
+import scala.collection.mutable.HashMap
 import java.util.concurrent.{TimeUnit, ConcurrentHashMap, Executors}
 import akka.actor.{ActorSelection, ActorRef, Actor, Props}
 import org.apache.spark.{SparkException, Logging, SparkEnv}
@@ -57,6 +58,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   var inputInfoTracker: InputInfoTracker = null
 
   private var jobMonitor: ActorSelection = null
+  var dataTable: HashMap[String, Double] = null
 
   def start(): Unit = synchronized {
     if (eventActor != null) return // scheduler has already been started
@@ -79,9 +81,13 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
 
       def receive = {
         case event: JobSchedulerEvent => processEvent(event)
-
+        // from master
         case JobMonitorUrl(url) =>
           jobMonitor = context.actorSelection(url)
+          jobMonitor ! JobSchedulerEventActor(eventActor)
+        // from jobMonitor
+        case DataReallocateTable(result) =>
+          dataTable = result.clone()
       }
     }), "JobScheduler")
 
@@ -130,6 +136,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     if (jobSet.jobs.isEmpty) {
       logInfo("No jobs added for time " + jobSet.time)
     } else {
+      receiverTracker.dataReallocateTableNextBatch(dataTable)
       jobSets.put(jobSet.time, jobSet)
       jobSet.jobs.foreach(job => jobExecutor.execute(new JobHandler(job)))
       logInfo("Added jobs for time " + jobSet.time)

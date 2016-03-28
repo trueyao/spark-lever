@@ -16,6 +16,8 @@
  */
 package org.apache.spark.monitor
 
+import akka.actor.ActorRef
+
 import scala.collection.mutable.HashMap
 
 /**
@@ -82,7 +84,7 @@ private[spark] object JobMonitorMessages {
   case class ReceivedDataSize(host: String, dataSize: Long) extends JobMonitorMessage
 
   //JobMonitor to Receiver
-  case class DataReallocateTable(table: HashMap[String, Double], nextBatch: Long) extends JobMonitorMessage
+  case class DataReallocateTable(table: HashMap[String, Double]) extends JobMonitorMessage
 
   // JobMonitor to BlockGenerator in spark streaming
   case class UpdateFunction(needSplit: Boolean, workerDataRatio: HashMap[String, Double]) extends JobMonitorMessage
@@ -90,6 +92,8 @@ private[spark] object JobMonitorMessages {
   // JobScheduler to JobMonitor
   case class JobSetFinished(totalDelay: Long, forTime: Long, processingDelay: Long, totalReceivedDataSize: Long)
     extends JobMonitorMessage
+
+  case class JobSchedulerEventActor(JobScheduler: ActorRef)
 }
 
 private[spark] sealed trait MonitorMessage extends Serializable

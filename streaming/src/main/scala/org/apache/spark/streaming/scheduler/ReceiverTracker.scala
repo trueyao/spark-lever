@@ -23,6 +23,7 @@ import org.apache.spark.deploy.master.Master
 import org.apache.spark.monitor.JobMonitorMessages._
 import org.apache.spark.util.AkkaUtils
 
+import scala.collection.mutable
 import scala.collection.mutable.{HashMap, SynchronizedMap}
 import scala.language.existentials
 
@@ -108,6 +109,11 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
   }
 
+  def dataReallocateTableNextBatch(result: HashMap[String, Double]): Unit ={
+    for(receiverActor <- receiverInfo) {
+      receiverActor._2.actor ! ReallocateTable(result)
+    }
+  }
   /** Allocate all unallocated blocks to the given batch. */
   def allocateBlocksToBatch(batchTime: Time): Unit = {
     if (receiverInputStreams.nonEmpty) {
@@ -245,9 +251,9 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       case StreamingReceivedSize(size: Long, host: String) =>
         jobMonitor ! ReceivedDataSize(host, size)
       //From JobMonitor
-      case DataReallocateTable(result, nextBatch) =>
+      case DataReallocateTable(result) =>
         for(receiverActor <- receiverInfo) {
-          receiverActor._2.actor ! ReallocateTable(result, nextBatch)
+          receiverActor._2.actor ! ReallocateTable(result)
         }
     }
   }
