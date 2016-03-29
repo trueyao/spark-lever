@@ -105,6 +105,9 @@ private[spark] class JobMonitor(master: ActorRef,
         workerToHost.map(i => result(i._2) = averageRatio)
         if(jobScheduler != null) {
           jobScheduler ! DataReallocateTable(result)
+          logInfo(s"When jobSet received no data,the DataRealloateTable is ${result}")
+        }else {
+          logInfo("jobScheduler is null.")
         }
         /**
         if(receiverTracker != null) {

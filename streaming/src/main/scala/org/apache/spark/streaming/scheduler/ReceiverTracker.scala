@@ -112,17 +112,13 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   def dataReallocateTableNextBatch(result: HashMap[String, Double]): Unit ={
     if (dataReallocateTable == null){
-      dataReallocateTable = result
+      dataReallocateTable = result.clone()
+      logInfo(s"for the first time to value dataReallocateTable,it is ${dataReallocateTable}")
     }else {
       for(receiverActor <- receiverInfo) {
         receiverActor._2.actor ! ReallocateTable(result)
       }
     }
-    /**
-    for(receiverActor <- receiverInfo) {
-      receiverActor._2.actor ! ReallocateTable(result)
-    }
-      */
   }
   /** Allocate all unallocated blocks to the given batch. */
   def allocateBlocksToBatch(batchTime: Time): Unit = {
@@ -173,6 +169,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     receiverInfo(streamId) = ReceiverInfo(
       streamId, s"${typ}-${streamId}", receiverActor, true, host)
     receiverActor ! ReallocateTable(dataReallocateTable) //Added by yy
+    logInfo(s"in registerReceiver(),the dataReallocateTable is ${dataReallocateTable}")
     listenerBus.post(StreamingListenerReceiverStarted(receiverInfo(streamId)))
     logInfo("Registered receiver for stream " + streamId + " from " + sender.path.address)
   }
