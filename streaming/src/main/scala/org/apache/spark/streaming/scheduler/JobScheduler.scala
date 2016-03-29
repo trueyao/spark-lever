@@ -137,7 +137,6 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
       logInfo("No jobs added for time " + jobSet.time)
     } else {
       receiverTracker.dataReallocateTableNextBatch(dataTable)
-      logInfo(s"in submitJobSet(),the dataTable is ${dataTable}")
       jobSets.put(jobSet.time, jobSet)
       jobSet.jobs.foreach(job => jobExecutor.execute(new JobHandler(job)))
       logInfo("Added jobs for time " + jobSet.time)

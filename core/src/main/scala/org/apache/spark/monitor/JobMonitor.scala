@@ -146,9 +146,11 @@ private[spark] class JobMonitor(master: ActorRef,
         hostToEstimateDataSize(worker._2) = hostToEstimateDataSize.getOrElseUpdate(worker._2, 0L) + workerEstimateDataSize(worker._1)
       }
       logInfo(s"test - jobset for time:${jobSetTime} totally handled ${jobSetHandledDataSize} bytes")
+      /**
       workerEstimateDataSize.clear()
       workerHandledDataSize.clear()
       workerToHost.clear()
+        */
       sendDataToCertainLocation2(hostToEstimateDataSize)
     }
   }

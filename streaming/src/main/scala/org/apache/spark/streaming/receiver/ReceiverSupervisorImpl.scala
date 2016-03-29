@@ -99,7 +99,6 @@ private[streaming] class ReceiverSupervisorImpl(
             blockGenerator.changeUpdateFunction()  //将blockGenerator中blockIntervalTimer(定时器)的回调函数改成updateCurrentBufferWithSplit
             haveChangedFunc = true
           }                                         //以往是官方的updateCurrentBuffer
-          logInfo(s"int ReceiverSupervisorImpl,the dataTable is ${result}")
           val splitRatio = new HashMap[Int, Double]
           val blockIdToHost = new HashMap[Int, String]
           var number = 0
@@ -216,7 +215,8 @@ private[streaming] class ReceiverSupervisorImpl(
   var blockIdToHostTable = new HashMap[Int, String]
 
   def changeBlockIdToHostTable(newTable: HashMap[Int, String]) = {
-    blockIdToHostTable = newTable.clone()
+    //blockIdToHostTable = newTable.clone()
+    blockIdToHostTable = newTable
   }
 
   /** Report error to the receiver tracker */

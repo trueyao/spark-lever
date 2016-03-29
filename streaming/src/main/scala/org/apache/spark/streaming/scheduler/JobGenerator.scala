@@ -243,6 +243,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       case Success(jobs) =>
         val receivedBlockInfos =
           jobScheduler.receiverTracker.getBlocksOfBatch(time).mapValues { _.toArray }
+        /**
         val lastThreeBatchs = Seq(time-graph.batchDuration*2,time-graph.batchDuration,time)
         val inputInfo = jobScheduler.inputInfoTracker
         val streamIds = inputInfo.getInfo(time).keys.toSeq.sorted
@@ -250,7 +251,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
           logInfo( "YY:" + t + ",Stream" + id +" get "
             + inputInfo.getInfo(t).get(id).getOrElse(StreamInputInfo(id, 0, 0)).numRecords + " Records "
             + inputInfo.getInfo(t).get(id).getOrElse(StreamInputInfo(id, 0, 0)).totalSize + " bytes.")
-        }
+        } */
         jobScheduler.submitJobSet(JobSet(time, jobs, receivedBlockInfos))
       case Failure(e) =>
         jobScheduler.reportError("Error generating jobs for time " + time, e)

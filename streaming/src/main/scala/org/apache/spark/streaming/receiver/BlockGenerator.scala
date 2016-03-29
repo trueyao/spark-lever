@@ -181,7 +181,8 @@ private[streaming] class BlockGenerator(
   }
 
   def changeSplitRatio(newRatio: HashMap[Int, Double]) = {
-    splitRatio = newRatio.clone()
+    //splitRatio = newRatio.clone()
+    splitRatio = newRatio
   }
 
   /**
