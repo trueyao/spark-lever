@@ -164,7 +164,7 @@ private[spark] class TaskSchedulerImpl(
       val manager = createTaskSetManager(taskSet, maxTaskFailures)
       activeTaskSets(taskSet.id) = manager
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
-
+      /** //For now,we don't need pendingTaskSize property to reduce task delay
       val pendingTaskPartitionsForHost = manager.queryPendingTaskPartitionsForHost()
       logInfo(s"test - pendingTaskPartitionForHost is ${pendingTaskPartitionsForHost}")
       val shuffleOrResult = if(dagScheduler.stageIdToStage(taskSet.stageId).isShuffleMap) "ShuffleMap"
@@ -178,15 +178,7 @@ private[spark] class TaskSchedulerImpl(
           backend.notifyWorkerMonitorForPendingTaskSize(partitions._1, totalSize)
         }
       }
-/**
-      for (partitions <- pendingTaskPartitionsForHost) {
-        var totalSize = 0L
-        for (index <- partitions._2) {
-          totalSize += rdd.getRddBlockSize(index)
-        }
-        backend.notifyWorkerMonitorForPendingTaskSize(partitions._1, totalSize)
-      }
-*/
+      */
       if (!isLocal && !hasReceivedTask) {
         starvationTimer.scheduleAtFixedRate(new TimerTask() {
           override def run() {

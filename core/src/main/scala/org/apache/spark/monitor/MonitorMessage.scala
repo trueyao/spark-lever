@@ -33,6 +33,8 @@ private[spark] object WorkerMonitorMessages {
 
   case object RegisteredExecutorInWorkerMonitor
 
+  case object ClearExecutorHandleSpeed
+
   // Executor to WorkerMonitor
   // Added by Liuzhiyi
   case class ExecutorHandledDataSpeed(size: Long, speed: Double, executorId: String) extends WorkerMonitorMessage

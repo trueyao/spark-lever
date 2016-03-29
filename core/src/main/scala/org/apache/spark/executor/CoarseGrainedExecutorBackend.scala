@@ -85,6 +85,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     case RegisteredExecutorInWorkerMonitor =>
       logInfo("Successfully registered with WorkerMonitor")
 
+    case ClearExecutorHandleSpeed =>
+      totalSpeed = 0.0
 //    case HandledDataSpeed =>
 //      logInfo("Get data size which has been handled by executor")
 //      workerMonitor ! ExecutorHandledDataSpeed(executor.requireHandledDataSpeed, executorId)

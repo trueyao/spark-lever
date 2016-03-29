@@ -127,7 +127,10 @@ private[spark] class WorkerMonitor(
     //From JobMonitor
     case QueryEstimateDataSize =>
       sender ! WorkerEstimateDataSize(forecastDataSize, totalHandledDataSize,  workerId, host)
-      executorHandleSpeed.clear() //we only consider the speed in the last batch,can we ?
+      for (executor <- executors) {
+        executor._2 ! ClearExecutorHandleSpeed  //we only consider the speed in the last batch,can we ?
+      }
+      //executorHandleSpeed.clear() //we only consider the speed in the last batch,can we ?
       totalHandledDataSize = 0L
       totalExecuteTime = 0L
   }
