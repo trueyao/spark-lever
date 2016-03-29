@@ -100,6 +100,7 @@ private[spark] class JobMonitor(master: ActorRef,
         timer.schedule(new updateDataLocation2(forTime), batchDuration / 3)
         logInfo(s"This jobset received ${totalReceivedSize} bytes in all.")
       }else {
+        /**
         val result = new HashMap[String, Double]
         val averageRatio = 1.0 / workerToHost.values.toSet.size
         workerToHost.map(i => result(i._2) = averageRatio)
@@ -109,11 +110,7 @@ private[spark] class JobMonitor(master: ActorRef,
         }else {
           logInfo("jobScheduler is null.")
         }
-        /**
-        if(receiverTracker != null) {
-          receiverTracker ! DataReallocateTable(result)
-        }
-          */
+        */
         logInfo("This jobset received no data.")
       }
 
