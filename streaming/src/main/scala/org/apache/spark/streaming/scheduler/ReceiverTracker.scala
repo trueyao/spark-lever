@@ -80,7 +80,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   private var jobMonitor: ActorSelection = null
   private var jobMoniorUrl: String = null
-  private var dataReallocateTable:HashMap[String, Double] = null
+  private var dataReallocateTable = new HashMap[String, Double]
 
   /** Start the actor and receiver execution thread. */
   def start() = synchronized {
@@ -111,7 +111,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   }
 
   def dataReallocateTableNextBatch(result: HashMap[String, Double]): Unit ={
-    if (dataReallocateTable == null){
+    if (dataReallocateTable.isEmpty){
       dataReallocateTable = result.clone()
       logInfo(s"for the first time to value dataReallocateTable,it is ${dataReallocateTable}")
     }else {

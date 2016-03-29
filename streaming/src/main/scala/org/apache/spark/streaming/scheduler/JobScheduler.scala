@@ -58,7 +58,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   var inputInfoTracker: InputInfoTracker = null
 
   private var jobMonitor: ActorSelection = null
-  var dataTable: HashMap[String, Double] = null
+  var dataTable = new HashMap[String, Double]
 
   def start(): Unit = synchronized {
     if (eventActor != null) return // scheduler has already been started
