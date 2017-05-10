@@ -1,8 +1,8 @@
 # Spark-lever
 
-Spark-lever is based on Spark Streaming,it is a proactive capability-aware load balancing system for batch stream processing on heterogeneous clusters.
+Spark-lever is based on Spark Streaming, it is a pre-scheduling straggler mitigation framework for batched stream processing.
 
-Lever derives the load balancing model from running time states information of previous jobs and measure worker nodes' heterogeneity in computational capabilities by combining processing speed of previous job and hardware resources. When receiving input stream load, it distributes load in advance according to the processing capabilities that each worker node has, not in processing stage. Lever treats the problem of how to distribute load between worker nodes as a bin packing problem with divisible item sizes. An Optimized First Fit Decreasing (OFFD) algorithm is proposed for making load balancing decisions between overloaded worker nodes and underloaded worker nodes.  
+Lever first identifies potential stragglers and evaluates nodes' capacity by analyzing execution information of historical jobs. Then, Lever carefully pre-schedules job input data to each node before task scheduling so as to mitigate the potential stragglers.
 
 ## How to use ?
 
