@@ -6,6 +6,6 @@ Lever first identifies potential stragglers and evaluates nodes' capacity by ana
 
 ## How to use ?
 
-Now, Spark-lever is based on Spark-1.3.0, so you can get the documentation from Spark homepage (http://spark.apache.org/)
+Now, Spark-lever is based on Spark-1.3.0, so you can get the documentation from Spark homepage (http://spark.apache.org/). This is only the source code of Lever. So you need to compile Lever using mvn or sbt first. Then, you can deploy Lever on a heterogeneous cluster or data skew scenarios to test its performance.
 
 Have fun!
