@@ -16,13 +16,15 @@
  */
 package org.apache.spark.monitor
 
+import java.io.{InputStreamReader, BufferedReader}
+
 import akka.actor._
 import akka.remote.{AssociatedEvent, AssociationErrorEvent, AssociationEvent, DisassociatedEvent, RemotingLifecycleEvent}
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging,SparkConf}
 import org.apache.spark.monitor.WorkerMonitorMessages._
 import org.apache.spark.monitor.MonitorMessages._
-import org.apache.spark.util.{AkkaUtils, ActorLogReceive}
+import org.apache.spark.util.{SystemClock, AkkaUtils, ActorLogReceive}
 
 import scala.collection.mutable.{HashMap, HashSet}
 
@@ -34,7 +36,8 @@ private[spark] class WorkerMonitor(
        actorSystemName: String,
        host: String,
        port: Int,
-       actorName: String)
+       actorName: String,
+       conf: SparkConf)
   extends Actor with ActorLogReceive with Logging {
 
   // The speed is Byte/ms
@@ -51,16 +54,78 @@ private[spark] class WorkerMonitor(
   private var memory: Int = 0
   private var jobMonitor: ActorSelection = null
   private val schedulerBackendToTasks = new HashMap[ActorRef, HashSet[Long]]
+  private var schedulerBackend: ActorRef = null
   private var totalPendingTask = 0
   private var totalPendingTaskSize = 0L
   private var totalHandledDataSize = 0L
   private var totalExecuteTime = 0L
   private var batchDuration = 0L
 
+  private val clock = new SystemClock()
+  private val monitorInterval = conf.getLong("spark.wrangler.interval", 1000)
+  private val wranglerTimer = new RecurringTimer(clock, monitorInterval, wranglerMonitor, "WranglerMonitor")
+
+
   override def preStart() = {
     logInfo("Start worker monitor")
     logInfo("Connection to the worker ")
     worker ! RegisterWorkerMonitor(actorAkkaUrls)
+  }
+
+  /**
+   * This function is used to monitor node's resource utilization.
+   * Added by chenfei
+   */
+  def wranglerMonitor(time: Long): Unit = synchronized{
+    var cpuUsed = 0.0
+    var memUsage = 0.0
+    var averageLoadOneMin = 0.0
+    var averageLoadFiveMin = 0.0
+    var averageLoadFifteenMin = 0.0
+    var totalMem = 0
+    var freeMem = 0
+    var usedMem = 0
+    var cacheMem = 0
+    val rt = Runtime.getRuntime()
+    val p = rt.exec("top -b -n 1")
+    val in = new BufferedReader(new InputStreamReader(p.getInputStream()))
+    var str = in.readLine()
+    try {
+      while (!Option(str).getOrElse("").isEmpty) {
+        if (str.indexOf(" load average") != -1) {
+          val strArray = str.split(" |,")
+          val len = strArray.size
+          averageLoadOneMin = strArray(len - 5).toDouble
+          averageLoadFiveMin = strArray(len - 3).toDouble
+          averageLoadFifteenMin = strArray(len - 1).toDouble
+          logInfo(s"chenfei - load average:" + averageLoadOneMin + "," + averageLoadFiveMin + "," + averageLoadFifteenMin)
+        }
+        else if (str.indexOf("Mem") != -1 && str.indexOf("Swap") == -1) {
+          val strArray = str.split(" |,")
+          val len = strArray.size
+          freeMem = strArray(5).toInt
+          usedMem = strArray(len - 5).toInt
+          cacheMem = strArray(len - 2).toInt
+          totalMem = freeMem + usedMem + cacheMem
+          memUsage = usedMem * 1.0 / totalMem
+          logInfo(s"chenfei - mem usage:" + memUsage)
+        }
+        else if ((str.indexOf(" R ") != -1 || str.indexOf(" S ") != -1) && str.indexOf("top") == -1) {
+          val strArray = str.split(" ")
+          val len = strArray.size
+          cpuUsed = cpuUsed + strArray(len - 7).toDouble
+        }
+        str = in.readLine()
+      }
+      if(schedulerBackend != null){
+        schedulerBackend ! ReportResourceUtilization(host, cpuUsed/100.0, memUsage, averageLoadOneMin, cores.toDouble)
+        logInfo(s"chenfei - Resource Utilization: Host:${host}, cpuUsage:${cpuUsed}, memUsage:${memUsage}, average load:${averageLoadOneMin}")
+      }
+    } catch {
+      case nf: NumberFormatException =>
+        logInfo("chenfei - There is something wrong with Number Format!")
+    }
+    in.close()
   }
 
   override def receiveWithLogging = {
@@ -82,18 +147,6 @@ private[spark] class WorkerMonitor(
     case ExecutorHandledDataSpeed(size, speed, executorId) =>
       logInfo(s"executor handled data size ${size}, speed ${speed}, executor ${executorId}")
       executorHandleSpeed(executorId) = speed
-      /**
-//      totalPendingTask -= 1
-      if (size > 0) {
-        if (totalPendingTaskSize > size) {
-          totalPendingTaskSize -= size
-        } else {
-          logInfo(s"totalPendingTaskSize is smaller than size")
-          totalPendingTaskSize -= size
-        }
-        totalHandledDataSize += size
-      }
-        */
       totalHandledDataSize += size
 
     case ExecutorFinishedTaskData(size, time, executorId) =>
@@ -112,6 +165,7 @@ private[spark] class WorkerMonitor(
   //From CoarseGrainedSchedulerBackend
     case RequestConnectionToWorkerMonitor =>
       schedulerBackendToTasks(sender) = new HashSet[Long]
+      schedulerBackend = sender
       logInfo(s"connected to scheduler backend ${sender}")
       sender ! ConnectedWithWorkerMonitor(host)
 
@@ -125,30 +179,34 @@ private[spark] class WorkerMonitor(
     case StreamingBatchDuration(duration) =>
       batchDuration = duration
     //From JobMonitor
+
+    case JobStartedToWorkerMonitor =>
+      if (conf.getBoolean("spark.wrangler", false)) {
+        logInfo("Starting Wrangler monitoring thread")
+        Thread.sleep(5000)
+        wranglerTimer.start()
+      }
+
+    case ApplicationStopedToWorkerMonitor =>
+      wranglerTimer.stop(interruptTimer = false)
+      schedulerBackend ! ReportResourceUtilization(host, 0.0, 0.0, 0.0, cores.toDouble)
+
     case QueryEstimateDataSize =>
-      sender ! WorkerEstimateDataSize(forecastDataSize, totalHandledDataSize,  workerId, host)
+      sender ! WorkerEstimateDataSize(forecastWorkerSpeed, totalHandledDataSize,  workerId, host)
+      for (executor <- executors) {
+        executor._2 ! ClearExecutorHandleSpeed  //we only consider the speed in the last batch,can we ?
+      }
+      //executorHandleSpeed.clear() //we only consider the speed in the last batch,can we ?
       totalHandledDataSize = 0L
       totalExecuteTime = 0L
   }
 
-  private def forecastDataSize: Long = {
+  private def forecastWorkerSpeed: Long = {
     var workerSpeed = 0.0
     for (executorSpeed <- executorHandleSpeed) {
       workerSpeed += executorSpeed._2
     }
-
-    if (workerSpeed != 0.0) {
-      (batchDuration * workerSpeed).toLong
-    } else {
-      0L
-    }
-    /**
-    if (totalExecuteTime != 0){
-      ((totalHandledDataSize*1.0 / totalExecuteTime) * batchDuration).toLong
-    }else{
-       0L
-    }
-      */
+    workerSpeed.toLong
   }
 
 }

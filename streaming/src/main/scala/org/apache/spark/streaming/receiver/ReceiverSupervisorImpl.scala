@@ -89,14 +89,18 @@ private[streaming] class ReceiverSupervisorImpl(
         case StopReceiver =>
           logInfo("Received stop signal")
           stop("Stopped by driver", None)
+        case QueryInputRate =>
+          val (inputRate,sizeOfRecord) = blockGenerator.getInputRateAndRecordSize()
+          trackerActor ! GettedInputRate(env.blockManager.blockManagerId.host,inputRate,sizeOfRecord)
         case CleanupOldBlocks(threshTime) =>
           logDebug("Received delete old batch signal")
           cleanupOldBlocks(threshTime)
           //Added by LiuZhiYi
         //From ReceiverTracker
-        case ReallocateTable(result, nextBatch) =>
+        case ReallocateTable(result) =>
           if (!haveChangedFunc) {
             blockGenerator.changeUpdateFunction()  //将blockGenerator中blockIntervalTimer(定时器)的回调函数改成updateCurrentBufferWithSplit
+            haveChangedFunc = true
           }                                         //以往是官方的updateCurrentBuffer
           val splitRatio = new HashMap[Int, Double]
           val blockIdToHost = new HashMap[Int, String]
@@ -106,7 +110,7 @@ private[streaming] class ReceiverSupervisorImpl(
             splitRatio(number) = line._2
             number += 1
           }
-          blockGenerator.changeSplitRatio(splitRatio, nextBatch)  //按之前设定好的比例将原始接收到的一个block拆分成多个block
+          blockGenerator.changeSplitRatio(splitRatio)  //按之前设定好的比例将原始接收到的一个block拆分成多个block
           changeBlockIdToHostTable(blockIdToHost)
       }
 
@@ -194,9 +198,6 @@ private[streaming] class ReceiverSupervisorImpl(
     logInfo(s"test - Before reallocate, block name is ${blockId.name}")
     blockId.name match {
       case STREAM(streamId, uniqueId, sliceId) =>
-        if (uniqueId.toLong == blockGenerator.getNextBatchTime) {
-          blockIdToHostTable = newBlockIdToHostTable.clone()
-        }
         val slice = sliceId.toInt
         if ((blockIdToHostTable.size) != 0
           && slice < blockIdToHostTable.size
@@ -215,10 +216,10 @@ private[streaming] class ReceiverSupervisorImpl(
   }
 
   var blockIdToHostTable = new HashMap[Int, String]
-  var newBlockIdToHostTable = new HashMap[Int, String]
 
   def changeBlockIdToHostTable(newTable: HashMap[Int, String]) = {
-    newBlockIdToHostTable = newTable.clone()
+    //blockIdToHostTable = newTable.clone()
+    blockIdToHostTable = newTable
   }
 
   /** Report error to the receiver tracker */

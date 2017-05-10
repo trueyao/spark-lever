@@ -17,8 +17,7 @@
 
 package org.apache.spark.deploy.worker
 
-import java.io.File
-import java.io.IOException
+import java.io.{File, IOException}
 import java.text.SimpleDateFormat
 import java.util.{UUID, Date}
 
@@ -181,6 +180,7 @@ private[spark] class Worker(
     metricsSystem.start()
     // Attach the worker metrics servlet handler to the web ui after the metrics system is started.
     metricsSystem.getServletHandlers.foreach(webUi.attachHandler)
+
   }
 
   def changeMaster(url: String, uiUrl: String) {
@@ -590,7 +590,7 @@ private[spark] object Worker extends Logging {
 //      monitorBoundPort, monitorActorName)
 
     monitorActorSystem.actorOf(Props(classOf[WorkerMonitor], workerActor, monitorSystemName, host,
-      monitorBoundPort, monitorActorName), name = monitorActorName)
+      monitorBoundPort, monitorActorName,conf), name = monitorActorName)
 
     (actorSystem, boundPort, monitorActorSystem, monitorBoundPort)
   }

@@ -56,6 +56,7 @@ private[spark] class ShuffleMapTask(
 
   override def runTask(context: TaskContext): (Long, MapStatus) = {
     // Deserialize the RDD using the broadcast variable.
+    val before = System.currentTimeMillis()
     val ser = SparkEnv.get.closureSerializer.newInstance()
     val (rdd, dep) = ser.deserialize[(RDD[_], ShuffleDependency[_, _, _])](
       ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)

@@ -19,6 +19,7 @@ package org.apache.spark.streaming.scheduler
 
 import scala.util.{Failure, Success, Try}
 import scala.collection.JavaConversions._
+import scala.collection.mutable.HashMap
 import java.util.concurrent.{TimeUnit, ConcurrentHashMap, Executors}
 import akka.actor.{ActorSelection, ActorRef, Actor, Props}
 import org.apache.spark.{SparkException, Logging, SparkEnv}
@@ -28,7 +29,7 @@ import org.apache.spark.deploy.DeployMessages.{RequestJobMonitorUrl, JobMonitorU
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.util.{AkkaUtils, ActorLogReceive}
 import org.apache.spark.monitor.JobMonitorMessages._
-
+import scala.collection.mutable.HashSet
 
 private[scheduler] sealed trait JobSchedulerEvent
 private[scheduler] case class JobStarted(job: Job) extends JobSchedulerEvent
@@ -57,11 +58,14 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   var inputInfoTracker: InputInfoTracker = null
 
   private var jobMonitor: ActorSelection = null
+  var planTable = new HashMap[String, HashMap[String, Double]]
+  var straggler = new HashSet[String]
+  var update = false
 
   def start(): Unit = synchronized {
     if (eventActor != null) return // scheduler has already been started
 
-    logDebug("Starting JobScheduler")
+    logInfo("Starting JobScheduler")
     eventActor = ssc.env.actorSystem.actorOf(Props(new Actor {
       override def preStart() = {
         val SPARK_REGEX = """spark://(.*)""".r
@@ -79,9 +83,15 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
 
       def receive = {
         case event: JobSchedulerEvent => processEvent(event)
-
+        // from master
         case JobMonitorUrl(url) =>
           jobMonitor = context.actorSelection(url)
+          jobMonitor ! JobSchedulerEventActor(eventActor)
+        // from jobMonitor
+        case DataReallocateTable(helpee,result) =>
+          planTable = result.clone()
+          straggler = helpee.clone()
+          update = true
       }
     }), "JobScheduler")
 
@@ -130,6 +140,11 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     if (jobSet.jobs.isEmpty) {
       logInfo("No jobs added for time " + jobSet.time)
     } else {
+      if(!straggler.isEmpty && update) {
+        receiverTracker.dataReallocateTableNextBatch(straggler, planTable)
+        update = false
+      }
+      receiverTracker.queryInputRate()
       jobSets.put(jobSet.time, jobSet)
       jobSet.jobs.foreach(job => jobExecutor.execute(new JobHandler(job)))
       logInfo("Added jobs for time " + jobSet.time)
@@ -178,6 +193,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
           logInfo("Total size: " + jobSet.totalsize)
           jobSets.remove(jobSet.time)
           jobGenerator.onBatchCompletion(jobSet.time)
+          jobGenerator.updateTime(jobSet.processingDelay)
           logInfo("Total delay: %.3f s for time %s (execution: %.3f s)".format(
             jobSet.totalDelay / 1000.0, jobSet.time.toString,
             jobSet.processingDelay / 1000.0

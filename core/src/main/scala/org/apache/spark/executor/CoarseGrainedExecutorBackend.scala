@@ -85,6 +85,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     case RegisteredExecutorInWorkerMonitor =>
       logInfo("Successfully registered with WorkerMonitor")
 
+    case ClearExecutorHandleSpeed =>
+      totalSpeed = 0.0
 //    case HandledDataSpeed =>
 //      logInfo("Get data size which has been handled by executor")
 //      workerMonitor ! ExecutorHandledDataSpeed(executor.requireHandledDataSpeed, executorId)
@@ -149,9 +151,10 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   override def handledDataUpdate(taskId: Long, startTime: Long, endTime: Long, dataSize: Long): Unit = {
     val currentHandledSpeed = (dataSize / (endTime - startTime)).abs
-    totalSpeed = if (totalSpeed == 0) currentHandledSpeed else totalSpeed * 0.4 + currentHandledSpeed * 0.6
-    logInfo(s"executor ${executorId} current handled speed ${currentHandledSpeed} bytes/ms," +
-      s" total handled speed ${totalSpeed} bytes/ms")
+    totalSpeed = currentHandledSpeed
+    val executionTime = endTime - startTime
+    logInfo(s"executor ${executorId} current handledDataSize ${dataSize} bytes," +
+      s" Execution time ${executionTime} ms")
     workerMonitor ! ExecutorHandledDataSpeed(dataSize, totalSpeed, executorId)
   }
   override def FinishedTaskDataUpdate(taskId: Long, startTime: Long, endTime: Long, dataSize: Long): Unit = {

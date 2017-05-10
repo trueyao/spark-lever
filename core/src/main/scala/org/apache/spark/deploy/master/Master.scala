@@ -933,7 +933,7 @@ private[spark] object Master extends Logging {
     val (jobMonitorActorSystem, jobMonitorBoundPort) = AkkaUtils.createActorSystem(jobMonitorSystemName, host,
       boundPort + 1, conf = conf, securityManager = jobMonitorSecurityMgr)
     jobMonitorActorSystem.actorOf(Props(classOf[JobMonitor], actor, jobMonitorSystemName, host,
-      jobMonitorBoundPort, jobMonitorActorName), name = jobMonitorActorName)
+      jobMonitorBoundPort, jobMonitorActorName, conf), name = jobMonitorActorName)
 
     (actorSystem, boundPort, portsResponse.webUIPort, portsResponse.restPort,
       jobMonitorActorSystem, jobMonitorBoundPort)

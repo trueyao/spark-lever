@@ -46,6 +46,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   private val conf = ssc.conf
   private val graph = ssc.graph
 
+
   val clock = {
     val clockClass = ssc.sc.conf.get(
       "spark.streaming.clock", "org.apache.spark.util.SystemClock")
@@ -58,8 +59,10 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     }
   }
 
+  private val dynamicbatchsize = ssc.sc.conf.get("spark.streaming.dynamicBatchSize","false")
+
   private val timer = new RecurringTimer(clock, ssc.graph.batchDuration.milliseconds,
-    longTime => eventActor ! GenerateJobs(new Time(longTime)), "JobGenerator")
+      longTime => eventActor ! GenerateJobs(new Time(longTime)), "JobGenerator" + dynamicbatchsize)
 
   // This is marked lazy so that this is initialized after checkpoint duration has been set
   // in the context and the generator has been started.
@@ -92,6 +95,14 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     } else {
       startFirstTime()
     }
+  }
+
+  /**
+   * Update processing time of last batch
+   * Added by chenfei
+   */
+  def updateTime(lastBatchTime: Long): Unit ={
+    timer.updateTime(lastBatchTime)
   }
 
   /**
@@ -243,6 +254,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       case Success(jobs) =>
         val receivedBlockInfos =
           jobScheduler.receiverTracker.getBlocksOfBatch(time).mapValues { _.toArray }
+        /**
         val lastThreeBatchs = Seq(time-graph.batchDuration*2,time-graph.batchDuration,time)
         val inputInfo = jobScheduler.inputInfoTracker
         val streamIds = inputInfo.getInfo(time).keys.toSeq.sorted
@@ -250,7 +262,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
           logInfo( "YY:" + t + ",Stream" + id +" get "
             + inputInfo.getInfo(t).get(id).getOrElse(StreamInputInfo(id, 0, 0)).numRecords + " Records "
             + inputInfo.getInfo(t).get(id).getOrElse(StreamInputInfo(id, 0, 0)).totalSize + " bytes.")
-        }
+        } */
         jobScheduler.submitJobSet(JobSet(time, jobs, receivedBlockInfos))
       case Failure(e) =>
         jobScheduler.reportError("Error generating jobs for time " + time, e)

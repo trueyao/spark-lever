@@ -32,6 +32,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
+
 /**
  * Schedules the tasks within a single TaskSet in the TaskSchedulerImpl. This class keeps track of
  * each task, retries tasks if they fail (up to a limited number of times), and
@@ -95,6 +96,13 @@ private[spark] class TaskSetManager(
   var parent: Pool = null
   var totalResultSize = 0L
   var calculatedTasks = 0
+
+  val taskLaunchTime = new HashMap[String, Long]
+  val taskFinishTime = new HashMap[String, Long]
+  val taskRunTime = new HashMap[String, Long]
+  val helpee = new HashSet[String]
+  val helper = new HashSet[String]
+  val median = new HashSet[String]
 
   val runningTasksSet = new HashSet[Long]
   override def runningTasks = runningTasksSet.size
@@ -518,6 +526,12 @@ private[spark] class TaskSetManager(
           logInfo("Starting %s (TID %d, %s, %s, %d bytes)".format(
               taskName, taskId, host, taskLocality, serializedTask.limit))
 
+          // Added by chenfei
+          // Record the time of first task in Host
+          if(!taskLaunchTime.contains(host)){
+            taskLaunchTime.put(host,System.currentTimeMillis())
+          }
+
           sched.dagScheduler.taskStarted(task, info)
           return Some(new TaskDescription(taskId = taskId, attemptNumber = attemptNum, execId,
             taskName, index, serializedTask))
@@ -527,6 +541,74 @@ private[spark] class TaskSetManager(
     }
     None
   }
+
+  /**
+   * Launch a task's clone in other executor
+   * Added by chenfei
+   */
+  @throws[TaskNotSerializableException]
+  def launchClones(execId: String,
+                   host: String,
+                   taskIndex: Int)
+  : Option[TaskDescription] =
+  {
+    if (!isZombie) {
+      val curTime = clock.getTimeMillis()
+
+      val task = tasks(taskIndex)
+      val taskId = sched.newTaskId()
+      //Do various bookkeeping
+      copiesRunning(taskIndex) += 1
+      val attemptNum = taskAttempts(taskIndex).size
+      val info = new TaskInfo(taskId, taskIndex, attemptNum, curTime,
+        execId, host, TaskLocality.ANY, false )
+      taskInfos(taskId) = info
+      taskAttempts(taskIndex) = info :: taskAttempts(taskIndex)
+
+      val serializedTask: ByteBuffer = try {
+        Task.serializeWithDependencies(task, sched.sc.addedFiles, sched.sc.addedJars, ser)
+      } catch {
+        // If the task cannot be serialized, then there's no point to re-attempt the task,
+        // as it will always fail. So just abort the whole task-set.
+        case NonFatal(e) =>
+          val msg = s"Failed to serialize task $taskId, not attempting to retry it."
+          logError(msg, e)
+          abort(s"$msg Exception during serialization: $e")
+          throw new TaskNotSerializableException(e)
+      }
+      if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
+        !emittedTaskSizeWarning) {
+        emittedTaskSizeWarning = true
+        logWarning(s"Stage ${task.stageId} contains a task of very large size " +
+          s"(${serializedTask.limit / 1024} KB). The maximum recommended task size is " +
+          s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
+      }
+      addRunningTask(taskId)
+
+      // We used to log the time it takes to serialize the task, but task size is already
+      // a good proxy to task serialization time.
+      // val timeTaken = clock.getTime() - startTime
+      val shuffleOrResult = if(sched.dagScheduler.stageIdToStage(taskSet.stageId).isShuffleMap) "ShuffleMap"
+      else "Result" //added by yy
+      //val taskName = s"task ${info.id} in ${shuffleOrResult} stage ${taskSet.id}"
+      val taskName = s"task[${task}] in ${shuffleOrResult} stage ${taskSet.id}"
+      logInfo("Starting %s (TID %d, %s, %s, %d bytes)".format(
+        taskName, taskId, host, TaskLocality.ANY, serializedTask.limit))
+
+      // Added by chenfei
+      // Record the time of first task in Host
+      if(!taskLaunchTime.contains(host)){
+        taskLaunchTime.put(host,System.currentTimeMillis())
+      }
+
+      sched.dagScheduler.taskStarted(task, info)
+      return Some(new TaskDescription(taskId = taskId, attemptNumber = attemptNum, execId,
+        taskName, taskIndex, serializedTask))
+    }
+    None
+  }
+
+
 
   private def maybeFinishTaskSet() {
     if (isZombie && runningTasks == 0) {
@@ -650,14 +732,45 @@ private[spark] class TaskSetManager(
     removeRunningTask(tid)
     sched.dagScheduler.taskEnded(
       tasks(index), Success, result.value(), result.accumUpdates, info, result.metrics)
+
+    // Kill any other attempts for the same task (since those are unnecessary now after
+    // one attempt completed successfully)
+    // Added by chenfei
+    for(attemptInfo <- taskAttempts(index)){
+      if(attemptInfo.running){
+        sched.backend.killTask(attemptInfo.taskId, attemptInfo.executorId, true)
+        logInfo(s"Killing attempt ${attemptInfo.attempt} on ${attemptInfo.host}")
+      }
+    }
+
     if (!successful(index)) {
       tasksSuccessful += 1
       logInfo("Finished task %s in stage %s (TID %d) in %d ms on %s (%d/%d)".format(
         info.id, taskSet.id, info.taskId, info.duration, info.host, tasksSuccessful, numTasks))
+
+      // Added by chenfei
+      // Record the time of last task in Host
+      taskFinishTime(info.host) = System.currentTimeMillis()
+
       // Mark successful and stop if all the tasks have succeeded.
+      // Record runtime of each task
+      // Added by chenfei
       successful(index) = true
       if (tasksSuccessful == numTasks) {
         isZombie = true
+
+        for (eachRecord <- taskLaunchTime) {
+          val mystage = taskSet.id
+          val myhost = eachRecord._1
+          if (taskFinishTime.contains(eachRecord._1)) {
+            val runtime = taskFinishTime(eachRecord._1) - eachRecord._2
+            taskRunTime(myhost) = runtime
+            logInfo("chenfei - Stageid:%s Host:%s runtime:%d".format(mystage, myhost, runtime))
+          }
+        }
+        if (sched.dagScheduler.stageIdToStage(taskSet.stageId).isShuffleMap) {
+          checkAndReportStraggler()
+        }
       }
     } else {
       logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
@@ -665,6 +778,44 @@ private[spark] class TaskSetManager(
     }
     failedExecutors.remove(index)
     maybeFinishTaskSet()
+  }
+
+  /**
+   *  check which nodes are helpee(straggler) and which nodes are helper(faster)
+   *  Added by chenfei
+   */
+  def checkAndReportStraggler(): Unit ={
+    helpee.clear()
+    helper.clear()
+    median.clear()
+    val durations = taskRunTime.values.toArray
+    Arrays.sort(durations)
+    val upperBoundForHelpee = durations(durations.size*3/4)
+    val lowerBoundForHelper = durations(durations.size*1/4)
+    for((host,runtime) <- taskRunTime){
+      if(runtime >= upperBoundForHelpee && !helpee.contains(host)){
+        helpee += host
+        logInfo(s"chenfei - Host: ${host} belongs to helpee!")
+      }
+      else if(runtime <= lowerBoundForHelper && !helper.contains(host)){
+        helper += host
+        logInfo(s"chenfei - Host: ${host} belongs to hepler!")
+      }
+      else if(runtime > lowerBoundForHelper && runtime < upperBoundForHelpee && !median.contains(host)){
+        if((upperBoundForHelpee - runtime) >= 600){
+          helper += host
+          logInfo(s"chenfei - Host: ${host} belongs to hepler!")
+        }
+        else {
+          median += host
+          logInfo(s"chenfei - Host: ${host} belongs to median!")
+        }
+      }
+    }
+    val ratiohelpeetomedian = (upperBoundForHelpee)*1.0/durations(durations.size*1/2)
+    val ratiomediantohelper = durations(durations.size*1/2)*1.0/lowerBoundForHelper
+    sched.reportStraggler(helpee,median,helper,ratiomediantohelper,ratiohelpeetomedian)
+    sched.reportRunTime(taskRunTime)
   }
 
   /**

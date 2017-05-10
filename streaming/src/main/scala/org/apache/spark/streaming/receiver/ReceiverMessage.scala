@@ -24,5 +24,6 @@ import scala.collection.mutable.HashMap
 private[streaming] sealed trait ReceiverMessage extends Serializable
 private[streaming] object StopReceiver extends ReceiverMessage
 private[streaming] case class CleanupOldBlocks(threshTime: Time) extends ReceiverMessage
-private[streaming] case class ReallocateTable(table: HashMap[String, Double], nextBatch: Long) extends ReceiverMessage
+private[streaming] case class ReallocateTable(table: HashMap[String, Double]) extends ReceiverMessage
+private[streaming] case object QueryInputRate extends ReceiverMessage
 

@@ -87,13 +87,13 @@ private[streaming] class BlockGenerator(
   private val blocksForPushing = new ArrayBlockingQueue[Block](blockQueueSize)
   private val blockPushingThread = new Thread() { override def run() { keepPushingBlocks() } } //单独的线程运行keepPushingBlocks
 
+  private var inputRate = 0.0
+  private var sizeOfRecord = 0L
+
   @volatile private var currentBuffer = new ArrayBuffer[Any]
   @volatile private var stopped = false
 
   private var splitRatio = new HashMap[Int, Double]
-  private var newSplitRatio = new HashMap[Int, Double]
-  private var nextBatchTime = 0L
-
   /** Start block generating and pushing threads. */
   def start() {
     blockIntervalTimer.start()
@@ -114,10 +114,22 @@ private[streaming] class BlockGenerator(
   /**
    * Push a single data item into the buffer. All received data items
    * will be periodically pushed into BlockManager.
+   * Modified by chenfei
    */
   def addData (data: Any): Unit = synchronized {
     waitToPush()
+    inputRate = measureInputRate()
+    sizeOfRecord = SizeEstimator.estimate(data.asInstanceOf[AnyRef])
     currentBuffer += data
+  }
+
+  /**
+   * return input data rate and size of each record
+   * Added by chenfei
+   */
+  def getInputRateAndRecordSize(): (Double, Long) = synchronized {
+    logInfo(s"chenfei - Returned InputRate: ${inputRate} and RecordSize: ${sizeOfRecord}")
+    return (inputRate,sizeOfRecord)
   }
 
   /**
@@ -183,9 +195,9 @@ private[streaming] class BlockGenerator(
     }
   }
 
-  def changeSplitRatio(newRatio: HashMap[Int, Double], nextBatch: Long) = {
-    nextBatchTime = nextBatch
-    newSplitRatio = newRatio.clone()
+  def changeSplitRatio(newRatio: HashMap[Int, Double]) = {
+    //splitRatio = newRatio.clone()
+    splitRatio = newRatio
   }
 
   /**
@@ -194,9 +206,6 @@ private[streaming] class BlockGenerator(
    * Added by Liuzhiyi
    */
   private def splitBlockBuffer(blockBuffer: ArrayBuffer[Any], nowTime: Long): Seq[ArrayBuffer[Any]] = {
-    if(nowTime == nextBatchTime) {
-      splitRatio = newSplitRatio.clone()
-    }
     logInfo(s"The split ratio at ${nowTime} is ${splitRatio}")
     val splitNum = splitRatio.size
     if (splitNum == 0) {
@@ -255,5 +264,4 @@ private[streaming] class BlockGenerator(
     listener.onPushBlock(block.id, block.buffer)
     logInfo("Pushed block " + block.id)
   }
-  def getNextBatchTime = nextBatchTime
 }

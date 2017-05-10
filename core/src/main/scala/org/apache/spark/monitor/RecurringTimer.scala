@@ -1,36 +1,15 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+package org.apache.spark.monitor
 
-package org.apache.spark.streaming.util
+/**
+ * Created by chenfei on 2016/12/26.
+ */
 
 import org.apache.spark.Logging
 import org.apache.spark.util.{Clock, SystemClock}
 
-private[streaming]
-class RecurringTimer(clock: Clock, period: Long, callbackFunc: (Long) => Unit, name: String)
+private[spark]
+class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name: String)
   extends Logging {
-
-  private var callback = callbackFunc
-  private var batchsize = period
-  private var lastBatch = period
-  private var secondLastBatch = period
-  private var lastProcTime = period
-  private var secondLastProcTime = period
-  private var numBatchFromSubmit = 0
 
   private val thread = new Thread("RecurringTimer - " + name) {
     setDaemon(true)
@@ -49,41 +28,6 @@ class RecurringTimer(clock: Clock, period: Long, callbackFunc: (Long) => Unit, n
    */
   def getStartTime(): Long = {
     (math.floor(clock.getTimeMillis().toDouble / period) + 1).toLong * period
-  }
-
-  /**
-    * Update last batch's processing time
-    * Added by chenfei
-    */
-  def updateTime(lastBatchTime: Long): Unit ={
-    secondLastProcTime = lastProcTime
-    lastProcTime = lastBatchTime
-  }
-
-  /**
-    * Dynamic batch size by fixed point iteration(SoCC'14)
-    * Added by chenfei
-    */
-  def dynamicBatchSize(): Unit ={
-      if (lastBatch > secondLastBatch) {
-        if ((lastProcTime * 1.0 / lastBatch > secondLastProcTime * 1.0 / secondLastBatch)
-          && (lastProcTime > 0.75 * lastBatch)) {
-          batchsize = ((1 - 0.25) * secondLastBatch).toLong
-        }
-        else {
-          batchsize = (lastProcTime / 0.75).toLong
-        }
-      }
-      else {
-        if ((secondLastProcTime * 1.0 / secondLastBatch > lastProcTime * 1.0 / lastBatch)
-          && (lastProcTime > 0.75 * lastBatch)) {
-          batchsize = ((1 - 0.25) * lastBatch).toLong
-        }
-        else {
-          batchsize = (lastProcTime / 0.75).toLong
-        }
-      }
-    logInfo("The batch size is set to be:" + batchsize)
   }
 
   /**
@@ -130,10 +74,6 @@ class RecurringTimer(clock: Clock, period: Long, callbackFunc: (Long) => Unit, n
     }
     prevTime
   }
-  /** Added by Liuzhiyi*/
-  def changeCallbackFunc(callbackFunc: (Long) => Unit): Unit ={
-    callback = callbackFunc
-  }
 
   /**
    * Repeatedly call the callback every interval.
@@ -144,21 +84,7 @@ class RecurringTimer(clock: Clock, period: Long, callbackFunc: (Long) => Unit, n
         clock.waitTillTime(nextTime)
         callback(nextTime)
         prevTime = nextTime
-        if(numBatchFromSubmit<5){
-          nextTime += period
-          numBatchFromSubmit += 1
-        }
-        else {
-          if (name.equals("JobGeneratorenable")) {
-            secondLastBatch = lastBatch
-            lastBatch = batchsize
-            dynamicBatchSize()
-            nextTime += batchsize
-          }
-          else {
-            nextTime += period
-          }
-        }
+        nextTime += period
         logDebug("Callback for " + name + " called at time " + prevTime)
       }
     } catch {
@@ -167,7 +93,7 @@ class RecurringTimer(clock: Clock, period: Long, callbackFunc: (Long) => Unit, n
   }
 }
 
-private[streaming]
+private[spark]
 object RecurringTimer {
 
   def main(args: Array[String]) {
@@ -185,4 +111,3 @@ object RecurringTimer {
     timer.stop(true)
   }
 }
-

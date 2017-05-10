@@ -16,7 +16,6 @@
  */
 
 package org.apache.spark.util
-
 import java.lang.management.ManagementFactory
 import java.lang.reflect.{Array => JArray}
 import java.lang.reflect.Field

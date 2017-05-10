@@ -21,7 +21,6 @@ import java.nio.ByteBuffer
 import java.util.{TimerTask, Timer}
 import java.util.concurrent.atomic.AtomicLong
 
-import akka.actor.Actor
 import org.apache.spark.rdd.RDD
 
 import scala.concurrent.duration._
@@ -30,6 +29,7 @@ import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 import scala.language.postfixOps
 import scala.util.Random
+import scala.util.control.Breaks._
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
@@ -38,6 +38,12 @@ import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.util.Utils
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
+
+import akka.actor.{ActorSelection, ActorRef, Actor, Props}
+import org.apache.spark.deploy.DeployMessages.{RequestJobMonitorUrl, JobMonitorUrl}
+import org.apache.spark.deploy.master.Master
+import org.apache.spark.util.{AkkaUtils, ActorLogReceive}
+import org.apache.spark.monitor.JobMonitorMessages._
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -57,10 +63,12 @@ import org.apache.spark.storage.BlockManagerId
 private[spark] class TaskSchedulerImpl(
     val sc: SparkContext,
     val maxTaskFailures: Int,
-    isLocal: Boolean = false)
+    isLocal: Boolean,
+    masterUrls: Array[String] )
   extends TaskScheduler with Logging
 {
-  def this(sc: SparkContext) = this(sc, sc.conf.getInt("spark.task.maxFailures", 4))
+
+  def this(sc: SparkContext) = this(sc, sc.conf.getInt("spark.task.maxFailures", 4), false, null)
 
   val conf = sc.conf
 
@@ -97,6 +105,12 @@ private[spark] class TaskSchedulerImpl(
   protected val hostsByRack = new HashMap[String, HashSet[String]]
 
   protected val executorIdToHost = new HashMap[String, String]
+
+  private var eventActor: ActorRef = null
+  private var jobMonitor: ActorSelection = null
+  private var shuffleMapTaskRunTime = new HashMap[String, Long]
+  private var startTime = 0L
+  private var receiverReady = false
 
   // Listener object to pass upcalls into
   var dagScheduler: DAGScheduler = null
@@ -140,15 +154,49 @@ private[spark] class TaskSchedulerImpl(
 
   def newTaskId(): Long = nextTaskId.getAndIncrement()
 
-  override def start() {
+  override def start():Unit = synchronized {
+    startTime = System.currentTimeMillis()
+    if (eventActor != null) return //TaskSchedulerImpl has already been started. Added by chenfei
+
+    logInfo("Starting TaskSchedulerImpl Actor")
+    eventActor = SparkEnv.get.actorSystem.actorOf(Props(new Actor {
+      override def preStart() = {
+
+        val masterAkkaUrls = masterUrls.map(Master.toAkkaUrl(_, AkkaUtils.protocol(sc.env.actorSystem)))
+        for (masterAkkaUrl <- masterAkkaUrls) {
+          logInfo("Connecting to master " + masterAkkaUrl + "...")
+          val masterActor = context.actorSelection(masterAkkaUrl)
+          masterActor ! RequestJobMonitorUrl
+        }
+      }
+
+      def receive = {
+        case JobMonitorUrl(url) =>
+          jobMonitor = context.actorSelection(url)
+      }
+    }), "TaskSchedulerImpl")
+
     backend.start()
 
     if (!isLocal && conf.getBoolean("spark.speculation", false)) {
       logInfo("Starting speculative execution thread")
       import sc.env.actorSystem.dispatcher
       sc.env.actorSystem.scheduler.schedule(SPECULATION_INTERVAL milliseconds,
-            SPECULATION_INTERVAL milliseconds) {
-        Utils.tryOrExit { checkSpeculatableTasks() }
+        SPECULATION_INTERVAL milliseconds) {
+        Utils.tryOrExit {
+          checkSpeculatableTasks()
+        }
+      }
+    }
+
+    if (!isLocal && conf.getBoolean("spark.skewtune", false)) {
+      logInfo("Starting skewtune procedure")
+      import sc.env.actorSystem.dispatcher
+      sc.env.actorSystem.scheduler.schedule(2000 milliseconds,
+        2000 milliseconds) {
+        Utils.tryOrExit {
+          checkSkewTune()
+        }
       }
     }
   }
@@ -156,7 +204,27 @@ private[spark] class TaskSchedulerImpl(
   override def postStartHook() {
     waitBackendReady()
   }
-// This method is added by Liuzhiyi
+
+  /**
+   * Report to JobMonitor about which nodes are helpee(straggler)
+   * and which nodes are helper(faster)
+   * Added by chenfei
+   */
+  def reportStraggler(helpee: HashSet[String],median: HashSet[String],helper: HashSet[String],ratiomediantohelper: Double,ratiohelpeetomedian: Double): Unit = {
+    logInfo(s"chenfei - Helpee:${helpee},Median:${median},Helper:${helper},Ratioa:${ratiomediantohelper},Ratiob:${ratiohelpeetomedian}")
+    jobMonitor ! ReportStraggler(helpee,median,helper,ratiomediantohelper,ratiohelpeetomedian)
+  }
+
+  /**
+   * Report to JobMonitor about the runtime of ShuffleMapTasks
+   * Added by chenfei
+   */
+  def reportRunTime(runtime: HashMap[String, Long]) = {
+    shuffleMapTaskRunTime = runtime.clone()
+    jobMonitor ! ReportRunTime(shuffleMapTaskRunTime)
+  }
+
+
   override def submitTasks(taskSet: TaskSet, rdd: RDD[_]) {
     val tasks = taskSet.tasks
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
@@ -164,7 +232,7 @@ private[spark] class TaskSchedulerImpl(
       val manager = createTaskSetManager(taskSet, maxTaskFailures)
       activeTaskSets(taskSet.id) = manager
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
-
+      /** //For now,we don't need pendingTaskSize property to reduce task delay
       val pendingTaskPartitionsForHost = manager.queryPendingTaskPartitionsForHost()
       logInfo(s"test - pendingTaskPartitionForHost is ${pendingTaskPartitionsForHost}")
       val shuffleOrResult = if(dagScheduler.stageIdToStage(taskSet.stageId).isShuffleMap) "ShuffleMap"
@@ -178,15 +246,7 @@ private[spark] class TaskSchedulerImpl(
           backend.notifyWorkerMonitorForPendingTaskSize(partitions._1, totalSize)
         }
       }
-/**
-      for (partitions <- pendingTaskPartitionsForHost) {
-        var totalSize = 0L
-        for (index <- partitions._2) {
-          totalSize += rdd.getRddBlockSize(index)
-        }
-        backend.notifyWorkerMonitorForPendingTaskSize(partitions._1, totalSize)
-      }
-*/
+      */
       if (!isLocal && !hasReceivedTask) {
         starvationTimer.scheduleAtFixedRate(new TimerTask() {
           override def run() {
@@ -240,7 +300,7 @@ private[spark] class TaskSchedulerImpl(
   private[scheduler] def createTaskSetManager(
       taskSet: TaskSet,
       maxTaskFailures: Int): TaskSetManager = {
-    new TaskSetManager(this, taskSet, maxTaskFailures)
+      new TaskSetManager(this, taskSet, maxTaskFailures)
   }
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
@@ -294,6 +354,49 @@ private[spark] class TaskSchedulerImpl(
             availableCpus(i) -= CPUS_PER_TASK
             assert(availableCpus(i) >= 0)
             launchedTask = true
+            if(!receiverReady){
+              if(System.currentTimeMillis() - startTime >= 5000){
+                receiverReady = true
+              }
+            }
+            // If dolly enable, we should launch a clone of each task.
+            // Added by chenfei
+            if(receiverReady) {
+              if (conf.getBoolean("spark.dolly", false)) {
+                var j = 0
+                breakable {
+                  for (k <- 0 until shuffledOffers.size) {
+                    if ((k != i) && (shuffledOffers(k).host != shuffledOffers(i).host)) {
+                      j = k
+                      if (availableCpus(k) >= availableCpus(i)) {
+                        break
+                      }
+                    }
+                  }
+                }
+                if (availableCpus(j) >= CPUS_PER_TASK) {
+                  val execIdClone = shuffledOffers(j).executorId
+                  val hostClone = shuffledOffers(j).host
+                  try {
+                    val taskCloneReturn = taskSet.launchClones(execIdClone, hostClone, task.index)
+                    if (taskCloneReturn.getOrElse() != null) {
+                      val taskClone = taskCloneReturn.get
+                      tasks(j) += taskClone
+                      val tidClone = taskClone.taskId
+                      taskIdToTaskSetId(tidClone) = taskSet.taskSet.id
+                      taskIdToExecutorId(tidClone) = execIdClone
+                      executorsByHost(hostClone) += execIdClone
+                      availableCpus(j) -= CPUS_PER_TASK
+                    }
+                  } catch {
+                    case e: TaskNotSerializableException =>
+                      logError(s"Resource offer failed, task set ${taskSet.name} was not serializable")
+                    // Do not offer resources for this task, but don't throw an error to allow other
+                    // task sets to be submitted.
+                  }
+                }
+              }
+            }
           }
         } catch {
           case e: TaskNotSerializableException =>
@@ -473,6 +576,9 @@ private[spark] class TaskSchedulerImpl(
     if (backend != null) {
       backend.stop()
     }
+    jobMonitor ! StopApplication()
+    SparkEnv.get.actorSystem.stop(eventActor)
+    eventActor = null
     if (taskResultGetter != null) {
       taskResultGetter.stop()
     }
@@ -490,6 +596,15 @@ private[spark] class TaskSchedulerImpl(
     if (shouldRevive) {
       backend.reviveOffers()
     }
+  }
+
+  /**
+   * Check if skew occurs and find the location
+   * where skew takes place
+   * Added by chenfei
+   */
+  def checkSkewTune(): Unit ={
+
   }
 
   def executorLost(executorId: String, reason: ExecutorLossReason) {

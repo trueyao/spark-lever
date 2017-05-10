@@ -58,6 +58,18 @@ class SocketReceiver[T: ClassTag](
     }.start()
   }
 
+  override def preferredLocation: Option[String] =
+    if(port == 1111){
+      Some("crane21")
+    }
+    else if(port == 2222){
+      Some("crane24")
+    }
+    else if(port == 3333){
+      Some("crane25")
+    }
+    else None
+
   def onStop() {
     // There is nothing much to do as the thread calling receive()
     // is designed to stop by itself isStopped() returns false

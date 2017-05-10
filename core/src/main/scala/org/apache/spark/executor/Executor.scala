@@ -222,6 +222,8 @@ private[spark] class Executor(
         taskStart = System.currentTimeMillis()
         val (handledDataSize, value) = task.run(taskAttemptId = taskId, attemptNumber = attemptNumber)
         val taskFinish = System.currentTimeMillis()
+        val processingTime = taskFinish - taskStart
+        logInfo(s"chenfei - Task Size: ${handledDataSize}, Processing Time: ${processingTime}")
 
         // If the task has been killed, let's fail it.
         if (task.killed) {

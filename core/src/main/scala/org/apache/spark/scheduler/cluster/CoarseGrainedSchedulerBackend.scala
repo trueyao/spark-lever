@@ -75,6 +75,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
   private val workerMonitorUrls = new HashSet[String]
   private val workerMonitorActor = new HashMap[String, ActorRef]  // [host, actor]
 
+  private val blackList = new HashSet[String]  //overloaded hosts
+
   class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor with ActorLogReceive {
     override protected def log = CoarseGrainedSchedulerBackend.this.log
     private val addressToExecutorId = new HashMap[Address, String]
@@ -122,6 +124,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
         if (!workerMonitorUrls.contains(urls)) {
           workerMonitorUrls.add(urls)
           context.actorSelection(urls) ! RequestConnectionToWorkerMonitor
+        }
+
+        //We can identify stragglers by analyzing resource utilization
+        // Added by chenfei
+      case ReportResourceUtilization(host, cpuUsage, memUsage, averageLoad, cores) =>
+        if(cpuUsage >= 2.0 || memUsage >= 0.6 || averageLoad >= cores){
+          blackList.add(host)
+          logInfo(s"chenfei - ${host} is straggler and Add it to blacklist")
+        }
+        else if(blackList.contains(host)){
+          blackList.remove(host)
         }
 
       case ConnectedWithWorkerMonitor(host) =>
@@ -186,17 +199,27 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
     }
 
     // Make fake resource offers on all executors
+    // Modified by chenfei
     def makeOffers() {
+      if(!blackList.isEmpty){
+        for(executor <- executorDataMap){
+          if(blackList.contains(executor._2.executorHost))
+            executorDataMap -= executor._1
+        }
+      }
       launchTasks(scheduler.resourceOffers(executorDataMap.map { case (id, executorData) =>
-        new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
+          new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
       }.toSeq))
     }
 
     // Make fake resource offers on just one executor
+    // Modified by chenfei
     def makeOffers(executorId: String) {
-      val executorData = executorDataMap(executorId)
-      launchTasks(scheduler.resourceOffers(
-        Seq(new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores))))
+      if(blackList.isEmpty || !blackList.contains(executorDataMap(executorId).executorHost)){
+        val executorData = executorDataMap(executorId)
+        launchTasks(scheduler.resourceOffers(
+          Seq(new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores))))
+      }
     }
 
     // Launch tasks returned by a set of resource offers

@@ -66,4 +66,21 @@ private[receiver] abstract class RateLimiter(conf: SparkConf) extends Logging {
       waitToPush()
     }
   }
+
+  /**
+   *  Measure Input Rate
+   *  Added by chenfei
+   */
+  def measureInputRate(): Double ={
+    val now = System.nanoTime
+    val elapsedNanosecs = math.max(now - lastSyncTime, 1)
+    val rate = messagesWrittenSinceSync.toDouble * 1000000000 / elapsedNanosecs
+    messagesWrittenSinceSync += 1
+    if (now > lastSyncTime + SYNC_INTERVAL) {
+      // Sync interval has passed; let's resync
+      lastSyncTime = now
+      messagesWrittenSinceSync = 1
+    }
+    rate
+  }
 }

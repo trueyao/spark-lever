@@ -23,15 +23,18 @@ import org.apache.spark.deploy.master.Master
 import org.apache.spark.monitor.JobMonitorMessages._
 import org.apache.spark.util.AkkaUtils
 
-import scala.collection.mutable.{HashMap, SynchronizedMap}
+import scala.collection.mutable
+import scala.collection.mutable.{HashMap, SynchronizedMap, HashSet}
 import scala.language.existentials
 
 import akka.actor._
 
+import org.apache.spark._
 import org.apache.spark.{Logging, SerializableWritable, SparkEnv, SparkException}
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.receiver._
 
+import scala.util.control.Breaks._
 /**
  * Messages used by the NetworkReceiver and the ReceiverTracker to communicate
  * with each other
@@ -49,6 +52,7 @@ private[streaming] case class ReportError(streamId: Int, message: String, error:
 private[streaming] case class DeregisterReceiver(streamId: Int, msg: String, error: String)
   extends ReceiverTrackerMessage
 private[streaming] case class StreamingReceivedSize(size: Long, host: String) extends ReceiverTrackerMessage
+private[streaming] case class GettedInputRate(host: String, InputRate: Double, sizeOfRecord: Long) extends ReceiverTrackerMessage
 
 /**
  * This class manages the execution of the receivers of ReceiverInputDStreams. Instance of
@@ -79,6 +83,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   private var jobMonitor: ActorSelection = null
   private var jobMoniorUrl: String = null
+  private val inputRate = new HashMap[String, Double]
+  private val sizeOfRecord = new HashMap[String, Long]
 
   /** Start the actor and receiver execution thread. */
   def start() = synchronized {
@@ -107,6 +113,28 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       logInfo("ReceiverTracker stopped")
     }
   }
+
+  /**
+   * Send reallocate message to helpee receiver
+   * Added by chenfei
+   */
+  def dataReallocateTableNextBatch(helpee: HashSet[String], result: HashMap[String, HashMap[String, Double]]): Unit ={
+    for(receiverActor <- receiverInfo) {
+      if(helpee.contains(receiverActor._2.location)){
+        receiverActor._2.actor ! ReallocateTable(result(receiverActor._2.location))
+      }
+    }
+  }
+
+  /** Send query-input-rate message to each receiver.
+   * Added by chenfei
+   */
+  def queryInputRate(): Unit={
+    for(receiverActor <- receiverInfo) {
+      receiverActor._2.actor ! QueryInputRate
+    }
+  }
+
 
   /** Allocate all unallocated blocks to the given batch. */
   def allocateBlocksToBatch(batchTime: Time): Unit = {
@@ -236,6 +264,17 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       case DeregisterReceiver(streamId, message, error) =>
         deregisterReceiver(streamId, message, error)
         sender ! true
+        //Added by chenfei
+        //From receiver
+      case GettedInputRate(host,returnedInputRate,returnedSizeOfRecord) =>
+        inputRate(host) = returnedInputRate
+        sizeOfRecord(host) = returnedSizeOfRecord
+        logInfo(s"chenfei - Host: ${host}, InputRate: ${returnedInputRate}")
+        logInfo(s"chenfei - InputRate.Szie: ${inputRate.size}, jobMonitor: ${jobMonitor}")
+        if(inputRate.size == receiverInfo.size && jobMonitor != null){
+          jobMonitor ! GettedInputRateToJobMonitor(inputRate,sizeOfRecord)
+        }
+
       //Added by Liuzhiyi
       //From master
       case JobMonitorUrl(url) =>
@@ -245,10 +284,10 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       case StreamingReceivedSize(size: Long, host: String) =>
         jobMonitor ! ReceivedDataSize(host, size)
       //From JobMonitor
-      case DataReallocateTable(result, nextBatch) =>
+      /*case DataReallocateTable(result) =>
         for(receiverActor <- receiverInfo) {
-          receiverActor._2.actor ! ReallocateTable(result, nextBatch)
-        }
+          receiverActor._2.actor ! ReallocateTable(result)
+        }*/
     }
   }
 
@@ -298,6 +337,34 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
 
     /**
+     *  Check whether all executors are alive
+     *  Added by chenfei
+     */
+    def checkExecutors(): Unit ={
+      if(ssc.sc.isLocal){
+        Seq(ssc.sparkContext.env.blockManager.blockManagerId.hostPort)
+      }
+      else{
+        breakable{
+          while(true){
+            val test = ssc.sparkContext.env.blockManager.master.getMemoryStatus.filter{
+              case (blockManagerId, _) =>
+                blockManagerId.executorId != SparkContext.DRIVER_IDENTIFIER
+            }.map{ case (blockManagerId, _) => blockManagerId.host}.toSeq
+            if(test.contains("crane21")&&test.contains("crane24")&&test.contains("crane25")){
+              break
+            }
+          }
+        }
+        val executors = ssc.sparkContext.env.blockManager.master.getMemoryStatus.filter{
+          case (blockManagerId, _) =>
+            blockManagerId.executorId != SparkContext.DRIVER_IDENTIFIER
+        }.map{ case (blockManagerId, _) => blockManagerId.hostPort}.toSeq
+        executors
+      }
+    }
+
+    /**
      * Get the receivers from the ReceiverInputDStreams, distributes them to the
      * worker nodes as a parallel collection, and runs them.
      */
@@ -310,6 +377,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
       // Right now, we only honor preferences if all receivers have them
       val hasLocationPreferences = receivers.map(_.preferredLocation.isDefined).reduce(_ && _)
+      val executorList = checkExecutors()
 
       // Create the parallel collection of receivers to distributed them on the worker nodes
       val tempRDD =
